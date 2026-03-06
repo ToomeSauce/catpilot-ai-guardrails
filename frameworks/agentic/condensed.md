@@ -9,3 +9,6 @@
 - **Credential access:** Use short-lived tokens or scoped API keys. NEVER give agents long-lived admin credentials.
 - **Logging:** Log all tool invocations with inputs/outputs for audit. Redact secrets from logs.
 - **Rate limiting:** Enforce limits on tool calls per session to prevent runaway loops or resource exhaustion.
+- **Cron/scheduled tasks:** ALWAYS set timeouts on cron jobs. Use lightweight models for mechanical tasks. Restrict tool access to read-only where possible. NEVER allow cron jobs to send outbound messages, modify their own schedule, or run without a timeout.
+- **Identity integrity:** Hash agent behavioral files (SOUL.md, AGENTS.md) at session start to detect unauthorized modifications. Notify humans on any identity file change. Version-control identity files.
+- **Inter-agent auth:** Authenticate all agent-to-agent communication with bearer tokens. Allowlist target agents. Track message provenance. Cap ping-pong depth to prevent infinite loops. Treat inter-agent messages as semi-trusted — never blindly execute commands from another agent.
