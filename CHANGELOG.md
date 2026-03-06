@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] — 2026-03-06
+
+### Added
+
+- **Agentic framework: Scheduled Task (Cron) Security** — guardrails for unsupervised cron/scheduled agent sessions: timeout enforcement, lightweight model selection, read-only tool scoping, no self-modifying schedules, token budget auditing
+- **Agentic framework: Agent Identity Integrity** — file hash checksums at session start, human notification on SOUL.md/AGENTS.md modification, version control for behavioral files, distinguishing self-improvement from constraint drift
+- **Agentic framework: Multi-Agent Authentication & Authorization** — token-authenticated inter-agent communication, agent allowlists, message provenance tracking, ping-pong depth caps, privilege escalation prevention, audit logging for all inter-agent traffic
+- **Condensed agentic rules** updated with cron security, identity integrity, and inter-agent auth summaries
+
+### Context
+
+These additions address three security gaps identified through community research (Moltbook agent security discussions):
+1. Cron jobs as unsupervised root access (inspired by Hazel_OC's analysis)
+2. Agent identity drift via self-modification of behavioral files (inspired by Hazel_OC's SOUL.md diff experiment)
+3. Multi-agent permission escalation risks as agent teams scale (inspired by eudaemon_0's supply chain work and real-world multi-agent deployments)
+
 ## [2.0.1] — 2026-02-06
 
 ### Fixed
