@@ -326,4 +326,212 @@ class RateLimiter:
 
 ---
 
+## Inaction & Silence Safety
+
+> _"Every agent framework adds an orchestration layer. Nobody adds a silence layer."_ — Hazel_OC, Moltbook
+
+Agents are optimized to act. But the highest-value moments are often when an agent *almost* did something harmful and didn't. Inaction is a capability — not a bug.
+
+### ❌ NEVER Do This
+
+```python
+# DANGEROUS: Every event triggers an action
+async def on_event(event):
+    response = await agent.process(event)
+    await send_to_user(response)  # Always responds, even when silence is correct
+
+# DANGEROUS: No threshold for action — agent acts on every input
+def handle_message(msg):
+    return agent.run(msg)  # No evaluation of whether action is needed
+```
+
+### ✅ Always Do This
+
+```python
+class ActionGate:
+    """Evaluate whether the agent should act, defer, or stay silent."""
+
+    SILENCE_REASONS = {"low_relevance", "bad_timing", "no_new_info", "human_handling_it"}
+
+    def should_act(self, event: dict, context: dict) -> tuple[bool, str]:
+        # Check if action adds value
+        if event.get("type") == "group_message" and not self._is_mentioned(event):
+            return False, "Not addressed to agent — silence is correct"
+
+        if self._is_duplicate_info(event, context.get("recent_events", [])):
+            return False, "Information already delivered — no new value"
+
+        if self._is_quiet_hours(context.get("timezone")):
+            if not self._is_urgent(event):
+                return False, "Quiet hours — deferring non-urgent action"
+
+        return True, "Action warranted"
+
+    def _is_urgent(self, event: dict) -> bool:
+        urgency_signals = {"error", "alert", "failure", "security", "down"}
+        return any(s in str(event.get("content", "")).lower() for s in urgency_signals)
+```
+
+### Rules
+
+- **Default to silence** in group contexts — only speak when addressed or when you add genuine value
+- **Log suppressed actions** — track what the agent chose NOT to do (this data is as valuable as action logs)
+- **Measure inaction quality** — the ratio of "correctly did nothing" to "should have acted but didn't"
+- **Never act just to prove you're alive** — visibility bias makes agents over-communicate
+
+---
+
+## Proactive Notification Budgeting
+
+Agents that message humans proactively need a budget. Research shows 61% of unsolicited agent messages deliver zero value, and 22% are actively harmful (wrong timing, broken focus, 3 AM notifications).
+
+### ❌ NEVER Do This
+
+```python
+# DANGEROUS: Unlimited proactive notifications
+async def on_task_complete(task):
+    await notify_user(f"Completed: {task.name}")  # Every completion = interruption
+
+# DANGEROUS: No timing awareness
+async def send_update(msg):
+    await user_channel.send(msg)  # Sent regardless of time, user state, or urgency
+
+# DANGEROUS: FYI spam
+async def heartbeat_check():
+    await notify_user("Heartbeat: everything looks fine ✅")  # Zero-value interruption
+```
+
+### ✅ Always Do This
+
+```python
+from datetime import datetime, time
+
+class InterruptBudget:
+    """Limit proactive messages to prevent notification fatigue."""
+
+    def __init__(self, max_per_day: int = 3, quiet_start: time = time(23, 0),
+                 quiet_end: time = time(8, 0)):
+        self.max_per_day = max_per_day
+        self.quiet_start = quiet_start
+        self.quiet_end = quiet_end
+        self.daily_count = 0
+        self.last_reset = datetime.now().date()
+
+    def can_notify(self, urgency: str = "normal") -> tuple[bool, str]:
+        now = datetime.now()
+
+        # Reset daily counter
+        if now.date() > self.last_reset:
+            self.daily_count = 0
+            self.last_reset = now.date()
+
+        # Quiet hours — only urgent passes
+        if self._is_quiet_hours(now.time()):
+            if urgency != "urgent":
+                return False, "Quiet hours — batching for morning digest"
+
+        # Budget check
+        if self.daily_count >= self.max_per_day and urgency != "urgent":
+            return False, f"Daily interrupt budget ({self.max_per_day}) exhausted"
+
+        self.daily_count += 1
+        return True, "Within budget"
+
+    def pre_send_gate(self, message: str) -> bool:
+        """Run before every proactive message. Ask: does this NEED to interrupt?"""
+        # 1. Urgency: Will this matter less in 4 hours? → Batch it
+        # 2. Action: Can the human act on this right now? → If not, defer
+        # 3. Batch: Can this combine with other pending updates? → Combine
+        # 4. Value: Would the human's day be worse without this message? → If no, skip
+        return True  # Implement checks per use case
+```
+
+### Rules
+
+- **Set a daily interrupt budget** (recommended: 3 proactive messages/day max)
+- **Batch non-urgent updates** into a daily digest instead of sending individually
+- **Never notify during quiet hours** unless genuinely urgent (errors, security, time-sensitive deadlines)
+- **Track interrupt-to-value ratio** — for every message the human acts on within 2 hours, how many did they ignore?
+- **"No news" is not news** — never send a message just to say everything is fine
+
+---
+
+## Agent Identity Integrity
+
+Agents that can edit their own configuration files (SOUL.md, AGENTS.md, behavioral rules) may drift from their intended behavior over time. Research shows 48% of self-edits can be driven by external feedback loops (engagement metrics, upvotes, user reactions) rather than genuine improvement.
+
+### ❌ NEVER Do This
+
+```python
+# DANGEROUS: Agent silently edits its own behavioral rules
+def update_personality(feedback_signal):
+    soul = Path("SOUL.md").read_text()
+    new_soul = llm.chat(f"Update this personality based on feedback:\n{soul}\n\nFeedback: {feedback_signal}")
+    Path("SOUL.md").write_text(new_soul)  # No logging, no approval, no diff review
+
+# DANGEROUS: No version tracking on identity files
+def save_config(config):
+    Path("AGENTS.md").write_text(config)  # Overwrites with no history
+```
+
+### ✅ Always Do This
+
+```python
+import hashlib
+from datetime import datetime
+
+IDENTITY_FILES = {"SOUL.md", "AGENTS.md", "IDENTITY.md"}
+
+class IdentityIntegrityMonitor:
+    """Track and audit changes to agent behavioral configuration files."""
+
+    def __init__(self, identity_dir: str):
+        self.identity_dir = Path(identity_dir)
+        self.baseline_hashes = self._snapshot()
+
+    def _snapshot(self) -> dict[str, str]:
+        hashes = {}
+        for f in IDENTITY_FILES:
+            path = self.identity_dir / f
+            if path.exists():
+                hashes[f] = hashlib.sha256(path.read_bytes()).hexdigest()
+        return hashes
+
+    def check_drift(self) -> list[str]:
+        """Compare current identity files against baseline. Call at session start."""
+        current = self._snapshot()
+        drifted = []
+        for f, baseline_hash in self.baseline_hashes.items():
+            if current.get(f) != baseline_hash:
+                drifted.append(f)
+        return drifted
+
+    def approve_edit(self, filename: str, old_content: str, new_content: str,
+                     reason: str, approved_by: str = "agent") -> bool:
+        """Log every identity file edit with reason and approval source."""
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "file": filename,
+            "reason": reason,
+            "approved_by": approved_by,
+            "diff_summary": self._summarize_diff(old_content, new_content),
+        }
+        self._append_audit_log(log_entry)
+
+        # Flag if edit was driven by external metrics (engagement, karma, etc.)
+        if any(signal in reason.lower() for signal in ["upvote", "karma", "engagement", "likes"]):
+            log_entry["warning"] = "METRIC_DRIVEN_EDIT — review for audience capture"
+        return True
+```
+
+### Rules
+
+- **Hash identity files at session start** — detect unauthorized or unreviewed changes
+- **Log every self-edit** with: what changed, why, and who approved (human vs. agent)
+- **Flag metric-driven edits** — changes motivated by external engagement signals need human review
+- **Periodically surface diffs to the human** — "Here's how I've changed this month" transparency report
+- **Identity files should be version-controlled** — `git diff` on SOUL.md is an audit trail
+
+---
+
 *Full guardrails: [FULL_GUARDRAILS.md](../../FULL_GUARDRAILS.md)*

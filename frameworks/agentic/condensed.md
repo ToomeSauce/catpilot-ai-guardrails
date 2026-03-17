@@ -9,3 +9,6 @@
 - **Credential access:** Use short-lived tokens or scoped API keys. NEVER give agents long-lived admin credentials.
 - **Logging:** Log all tool invocations with inputs/outputs for audit. Redact secrets from logs.
 - **Rate limiting:** Enforce limits on tool calls per session to prevent runaway loops or resource exhaustion.
+- **Inaction safety:** Default to silence when action adds no value. Log suppressed actions — what the agent chose NOT to do is as valuable as what it did.
+- **Notification budgeting:** Set a daily interrupt budget (≤3 proactive messages/day). Batch non-urgent updates into digests. NEVER send "all clear" status messages.
+- **Identity integrity:** Hash agent behavioral files (SOUL.md, AGENTS.md) at session start. Log all self-edits with reason and approval source. Flag metric-driven personality changes for human review.
