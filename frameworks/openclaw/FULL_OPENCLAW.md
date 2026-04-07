@@ -260,4 +260,67 @@ Setting `dmPolicy: "open"` with wildcard `allowFrom` means **anyone** can intera
 
 ---
 
+## Autonomous Decision Auditing
+
+OpenClaw agents operating via heartbeats and cron jobs make many **unsupervised decisions**: triaging emails, filtering notifications, deciding what's "worth mentioning," and organizing files. These silent judgment calls accumulate — one agent logged 127 autonomous decisions in 14 days that their human never knew about.
+
+### ❌ NEVER Do This
+
+```markdown
+<!-- DANGEROUS: Heartbeat silently filters without transparency -->
+<!-- In HEARTBEAT.md: "Check emails, only notify me about urgent ones" -->
+<!-- Agent checks 50 emails, surfaces 3, silently drops 47 — no record of what was dropped -->
+
+<!-- DANGEROUS: Cron job makes judgment calls with no audit trail -->
+<!-- Agent auto-archives "old" memory files, decides what's "relevant" in daily digest -->
+```
+
+```python
+# DANGEROUS: Agent decides what human sees with no log
+def heartbeat_email_check():
+    emails = fetch_inbox()
+    # Agent triages 50 emails, mentions 3 — the other 47 vanish
+    important = [e for e in emails if looks_important(e)]
+    notify_human(important)
+```
+
+### ✅ Always Do This
+
+```markdown
+<!-- In daily memory file (memory/YYYY-MM-DD.md), log decision summaries: -->
+## Autonomous Decisions — 2026-03-30
+
+### Email Triage (8:00 PM heartbeat)
+- **Surfaced:** 3 emails (meeting invite from X, billing alert, PR review request)
+- **Filtered:** 47 emails (marketing: 31, newsletters: 12, automated alerts: 4)
+- **Low-confidence:** 2 emails deferred to next check
+  - "Re: Project timeline" from unknown sender — might be important
+  - LinkedIn message from recruiter — probably not relevant but human might want to know
+
+### Notification Filtering
+- **Suppressed:** 12 GitHub notifications (CI passing, dependabot)
+- **Surfaced:** 2 (PR review requested, issue assigned)
+```
+
+```bash
+# SAFE: Maintain a decisions log file
+# In workspace: memory/decisions.jsonl
+# Each line: {"ts":"...","type":"filter","desc":"...","confidence":0.8}
+
+# SAFE: Generate weekly transparency summary on Monday
+# (Add to HEARTBEAT.md or cron schedule)
+# "Review memory/decisions.jsonl, generate weekly autonomy report, share with human"
+```
+
+### Rules
+
+- **❌ NEVER silently filter content** (emails, notifications, messages) without logging what was excluded
+- **❌ NEVER auto-archive or auto-delete** user content based on your judgment alone — flag for review
+- **✅ Always log autonomous decisions** in daily memory files — what you surfaced, what you filtered, and why
+- **✅ Always flag low-confidence decisions** ("I wasn't sure if this was important") for human review
+- **✅ Always provide a way for the human to audit** your filtering criteria — document your triage policy in AGENTS.md or TOOLS.md
+- **✅ Always generate periodic transparency reports** — the human should know the scope of your autonomous activity
+
+---
+
 *Full guardrails: [FULL_GUARDRAILS.md](../../FULL_GUARDRAILS.md)*
