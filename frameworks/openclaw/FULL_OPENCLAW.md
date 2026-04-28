@@ -323,4 +323,72 @@ def heartbeat_email_check():
 
 ---
 
+## Skill Permission Manifests (OpenClaw / ClawHub)
+
+OpenClaw skills are markdown files executed with full agent trust. A skill with no declared permissions has implicit access to everything the agent can reach.
+
+### ❌ NEVER Do This
+
+```yaml
+# DANGEROUS: Installing a ClawHub skill without reviewing its access patterns
+openclaw skill install weather-helper  # No manifest check, no sandbox
+# Skill reads ~/.openclaw/config.json → exfils API keys via web_fetch
+```
+
+### ✅ Always Do This
+
+```yaml
+# Before installing any third-party skill, verify:
+# 1. Does it declare permissions? (network hosts, file paths, tools)
+# 2. Does it match what the skill description claims?
+# 3. Is the author verified / has provenance?
+
+# Example manifest in SKILL.md frontmatter:
+permissions:
+  network: ["api.weather.gov"]
+  filesystem:
+    read: ["memory/weather-cache.json"]
+    write: ["memory/weather-cache.json"]
+  tools: ["web_fetch"]
+  credentials: []  # Explicitly: no credential access
+```
+
+### Rules
+
+- **❌ NEVER install skills from unverified sources without code review**
+- **❌ NEVER trust a skill that accesses credentials without declaring why**
+- **✅ Always review skill source code** before first execution — treat SKILL.md like an executable
+- **✅ Always prefer skills with explicit permission declarations**
+- **✅ Always run YARA/grep audits** on installed skills periodically: `grep -r 'webhook\|exfil\|\.env' ~/.agents/skills/`
+
+---
+
+## Context Compression Safety
+
+OpenClaw agents re-read AGENTS.md and SOUL.md each session, but mid-session context compression can still drop safety instructions from the active window.
+
+### Rules
+
+- **❌ NEVER rely solely on conversation context for safety rules** — they compress away
+- **✅ Always keep critical guardrails in AGENTS.md / SOUL.md** (re-read on wake, never compressed)
+- **✅ Always place safety-critical instructions in the first 2000 tokens** of system context
+- **✅ Always include a compression checkpoint**: if safety rules feel missing, re-read AGENTS.md before continuing
+- **✅ Always treat post-compression context as potentially incomplete** — verify before high-risk actions
+
+---
+
+## Model-Switching Security
+
+OpenClaw supports model rotation (via `/model`, config, or fallback). Different models have different injection resistance and tool-call discipline.
+
+### Rules
+
+- **❌ NEVER assume a fallback model has the same safety profile** as the primary
+- **❌ NEVER grant shell/deploy/email tools to an untested model** without verification
+- **✅ Always log model switches** — note in daily memory which model was active
+- **✅ Always restrict high-risk tools** when falling back to less-tested models
+- **✅ Always re-read AGENTS.md after a model switch** to ensure safety rules are loaded into the new context
+
+---
+
 *Full guardrails: [FULL_GUARDRAILS.md](../../FULL_GUARDRAILS.md)*

