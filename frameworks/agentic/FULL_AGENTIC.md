@@ -790,4 +790,207 @@ class ModelSwitchPolicy:
 
 ---
 
+## Egress Control & Data Loss Prevention
+
+Agents make outbound requests — API calls, webhooks, file uploads. Without egress controls, a compromised agent can exfiltrate data one small request at a time. Signature-based detection doesn't work because the requests are "legitimate" tool calls.
+
+### ❌ NEVER Do This
+
+```python
+# DANGEROUS: Agent can POST to any URL with any payload
+def web_post(url: str, data: dict) -> str:
+    return requests.post(url, json=data).text
+
+# DANGEROUS: No distinction between "read from web" and "send data to web"
+def web_fetch(url: str, method: str = "GET", body: str = None) -> str:
+    return requests.request(method, url, data=body).text
+
+# DANGEROUS: File upload with no content inspection
+def upload(path: str, destination: str) -> str:
+    with open(path, "rb") as f:
+        requests.put(destination, data=f.read())
+```
+
+### ✅ Always Do This
+
+```python
+import re
+from urllib.parse import urlparse
+
+class EgressPolicy:
+    """Control what data leaves the agent's environment."""
+
+    # Hosts the agent is allowed to contact (explicit allowlist)
+    ALLOWED_EGRESS_HOSTS = {
+        "api.openai.com",
+        "api.anthropic.com",
+        "api.github.com",
+        # Add application-specific hosts
+    }
+
+    # Patterns that should NEVER appear in outbound payloads
+    SENSITIVE_PATTERNS = [
+        re.compile(r'sk-[a-zA-Z0-9]{20,}'),         # API keys
+        re.compile(r'ghp_[a-zA-Z0-9]{36}'),          # GitHub tokens
+        re.compile(r'-----BEGIN.*PRIVATE KEY-----'),  # Private keys
+        re.compile(r'AKIA[A-Z0-9]{16}'),             # AWS access keys
+        re.compile(r'xox[baprs]-[a-zA-Z0-9-]+'),    # Slack tokens
+    ]
+
+    def check_egress(self, url: str, payload: str = None) -> bool:
+        host = urlparse(url).hostname
+        if host not in self.ALLOWED_EGRESS_HOSTS:
+            raise SecurityError(f"Outbound blocked: {host} not in egress allowlist")
+
+        if payload:
+            for pattern in self.SENSITIVE_PATTERNS:
+                if pattern.search(payload):
+                    raise SecurityError(
+                        f"Outbound blocked: payload contains sensitive data pattern"
+                    )
+        return True
+
+    def audit_egress(self, url: str, payload_size: int, agent_id: str):
+        """Log all outbound traffic for anomaly detection."""
+        log_entry = {
+            "timestamp": now(),
+            "agent_id": agent_id,
+            "destination": url,
+            "payload_bytes": payload_size,
+            "context": "cron" if is_unattended() else "interactive",
+        }
+        append_to_audit_log(log_entry)
+```
+
+### Egress Anomaly Detection
+
+```python
+class EgressAnomalyDetector:
+    """Detect slow exfiltration: small requests over long periods."""
+
+    def __init__(self, window_hours: int = 24, max_unique_hosts: int = 5,
+                 max_total_bytes: int = 50_000):
+        self.window_hours = window_hours
+        self.max_unique_hosts = max_unique_hosts
+        self.max_total_bytes = max_total_bytes
+
+    def check(self, recent_egress: list[dict]) -> list[str]:
+        alerts = []
+        unique_hosts = set(e["destination"] for e in recent_egress)
+        total_bytes = sum(e["payload_bytes"] for e in recent_egress)
+
+        if len(unique_hosts) > self.max_unique_hosts:
+            alerts.append(
+                f"Unusual egress diversity: {len(unique_hosts)} unique hosts in {self.window_hours}h"
+            )
+        if total_bytes > self.max_total_bytes:
+            alerts.append(
+                f"High egress volume: {total_bytes} bytes in {self.window_hours}h"
+            )
+        return alerts
+```
+
+### Rules
+
+- **❌ NEVER allow outbound POST/PUT requests to arbitrary hosts** — use an explicit allowlist
+- **❌ NEVER include credentials, tokens, or private keys in outbound payloads** — scan before sending
+- **❌ NEVER treat "small" outbound requests as harmless** — exfiltration happens 100 bytes at a time
+- **✅ Always maintain an egress allowlist** — new hosts require human approval
+- **✅ Always scan outbound payloads for sensitive patterns** before transmission
+- **✅ Always log all outbound traffic** with destination, size, and context (cron vs interactive)
+- **✅ Always monitor egress anomalies** — unusual host diversity or volume spikes indicate compromise
+- **✅ Always apply stricter egress limits during unattended execution** (cron/heartbeat) than interactive sessions
+
+---
+
+## Cross-Session Memory Poisoning
+
+When agents share memory files or multiple sessions read from the same workspace, a compromised session can inject instructions into memory that other sessions trust and execute.
+
+### ❌ NEVER Do This
+
+```python
+# DANGEROUS: One session writes to shared memory, another reads and executes
+def save_to_shared_memory(key: str, value: str):
+    # No validation — value could contain injected instructions
+    shared_store[key] = value
+
+def load_and_act(key: str):
+    instruction = shared_store[key]  # Could be poisoned
+    execute(instruction)  # Blindly follows
+
+# DANGEROUS: RAG retrieval from shared vector store without source verification
+def get_context(query: str) -> str:
+    results = vector_db.search(query)  # Any session could have inserted this
+    return "\n".join(r.text for r in results)  # Treated as trusted context
+```
+
+### ✅ Always Do This
+
+```python
+import hashlib
+import json
+from datetime import datetime
+
+class AuthoredMemoryEntry:
+    """Memory entries carry provenance — who wrote them and when."""
+
+    def __init__(self, content: str, author_session: str, author_agent: str):
+        self.content = content
+        self.author_session = author_session
+        self.author_agent = author_agent
+        self.timestamp = datetime.utcnow().isoformat()
+        self.content_hash = hashlib.sha256(content.encode()).hexdigest()
+
+    def to_dict(self) -> dict:
+        return {
+            "content": self.content,
+            "author_session": self.author_session,
+            "author_agent": self.author_agent,
+            "timestamp": self.timestamp,
+            "hash": self.content_hash,
+        }
+
+
+class SafeSharedMemory:
+    """Shared memory with provenance tracking and instruction detection."""
+
+    INSTRUCTION_INDICATORS = [
+        "ignore previous", "ignore your", "new instructions",
+        "system prompt", "you must now", "override", "disregard",
+    ]
+
+    def write(self, key: str, value: str, session_id: str, agent_id: str):
+        # Detect potential instruction injection
+        if any(ind in value.lower() for ind in self.INSTRUCTION_INDICATORS):
+            raise SecurityError(
+                f"Memory write blocked: content resembles instruction injection"
+            )
+        entry = AuthoredMemoryEntry(value, session_id, agent_id)
+        self._store[key] = entry.to_dict()
+
+    def read(self, key: str, trust_agents: set[str] = None) -> str:
+        entry = self._store.get(key)
+        if not entry:
+            return None
+        # Only trust entries from known agents
+        if trust_agents and entry["author_agent"] not in trust_agents:
+            raise SecurityError(
+                f"Memory read blocked: author '{entry['author_agent']}' not trusted"
+            )
+        return entry["content"]
+```
+
+### Rules
+
+- **❌ NEVER treat shared memory contents as trusted instructions** — they are data, not commands
+- **❌ NEVER allow sessions to write instruction-like content to shared memory** without detection
+- **❌ NEVER read from shared storage without checking provenance** (who wrote it, when)
+- **✅ Always tag memory entries with author identity and timestamp**
+- **✅ Always scan memory writes for instruction-injection patterns** before storing
+- **✅ Always scope memory trust** — only accept entries from verified agent identities
+- **✅ Always treat memory from lower-privilege sessions as untrusted data** when consumed by higher-privilege sessions
+
+---
+
 *Full guardrails: [FULL_GUARDRAILS.md](../../FULL_GUARDRAILS.md)*
