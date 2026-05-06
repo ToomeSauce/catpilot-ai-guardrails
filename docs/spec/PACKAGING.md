@@ -1,6 +1,6 @@
 # Packaging
 
-**Status:** v3.0 draft.
+**Status:** Active.
 **Companion to:** [`SKILL_FORMAT.md`](./SKILL_FORMAT.md).
 **Distribution channel:** [`npx skills add ToomeSauce/catpilot-ai-guardrails`](https://github.com/vercel-labs/skills) → indexed at [skills.sh](https://skills.sh).
 
@@ -14,7 +14,7 @@ Authoring granularity and install granularity are not the same thing.
 
 **Installing wants per-tier.** A user adopting Catpilot does not want to run `npx skills add` 11 times. They want one install for "the security baseline," one install for "the framework I'm using," and optionally one for "the agent-specific advanced stuff." Three installs, total. Most users will only do the first.
 
-The v3.0 layout decouples these. Authors edit small files; users install small numbers of bundles.
+This layout decouples them. Authors edit small files; users install small numbers of bundles.
 
 ## 2. The three tiers
 
@@ -72,7 +72,7 @@ metadata:
   catpilot:
     bundle:
       name: catpilot-security-core
-      version: 3.0.0
+      version: 2026.05.06               # CalVer; bumped per release
       tier: core
       components:
         - id: secret-blocking
@@ -101,7 +101,7 @@ metadata:
 | `name` | Constant per tier (`catpilot-security-core`, `catpilot-django-security`, `catpilot-security-advanced`). |
 | `description` | Hand-curated per tier. The bundler enforces ≤1024 chars but does not generate the prose. |
 | `license` | Inherited from `LICENSE` at repo root (MIT). |
-| `metadata.catpilot.bundle.version` | Hand-set in `bundle.toml` at the tier root. Bumped per release. |
+| `metadata.catpilot.bundle.version` | Hand-set in `bundle.toml` at the tier root. **CalVer** (`YYYY.MM.DD` or `YYYY.MM`) — bumped per release. The bundler refuses non-CalVer values. |
 | `metadata.catpilot.bundle.components[]` | Auto-listed from source skills, with their individual versions. |
 | `metadata.catpilot.severity` | `max(component severities)` using the ordering `info < low < medium < high < critical`. |
 | `metadata.catpilot.control_mappings.<fw>` | `union(component[*].control_mappings.<fw>)`, sorted, deduplicated. |
@@ -159,11 +159,12 @@ Cross-component file references inside `SKILL.md` bodies are rewritten by the bu
 
 ## 4. Per-component versioning inside a bundle
 
-Bundles ship a single user-visible version (`bundle.version`), but the components inside have their own versions. This matters for SaaS-side dynamic updates (out of scope for OSS) and for change tracking:
+Bundles ship a single user-visible version (`bundle.version`, CalVer), but the components inside have their own versions (semver). This matters for SaaS-side dynamic updates (out of scope for OSS) and for change tracking:
 
-- `secret-blocking@1.4.0` can ship inside `catpilot-security-core@3.2.0` without forcing every other component to bump.
+- `secret-blocking@1.4.0` can ship inside `catpilot-security-core@2026.07.15` without forcing every other component to bump.
 - The bundle's `components[]` list lets a runtime (or a curious user) see exactly which source-skill versions are baked in.
-- Bumping a component is a minor bump on the bundle. Removing one is a major.
+- Bumping or adding a component is just the next dated bundle. Removing a component is also just the next dated bundle — CalVer doesn't try to communicate "breaking," because at the bundle level the install command is stable forever.
+- Source skills carry their own breaking-change semantics via semver, for the SaaS-side pipeline that consumes them.
 
 ## 5. Determinism
 
@@ -216,4 +217,4 @@ The source-vs-bundle split is the right tradeoff: authors get fine-grained contr
 - The remaining 7 core source skills (`local-cli-safety`, `database-safety`, `docker-safety`, `secrets-management`, `pii-and-test-data`, `supply-chain`, `language-baseline`) — follow-up PRs.
 - Framework extension content — follow-up PRs, one per framework.
 - Advanced tier content — follow-up PR.
-- The new `README.md` on `main` — follow-up PR (timed with v3.0-rc tag).
+- A new top-level `README.md` rewrite on `main` — follow-up PR.

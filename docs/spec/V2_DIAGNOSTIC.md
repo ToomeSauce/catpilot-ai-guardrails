@@ -2,7 +2,7 @@
 
 **Status:** Internal candid memo
 **Author:** Catpilot security
-**Audience:** Catpilot team, v3.0 launch planning
+**Audience:** Catpilot team, relaunch planning
 **Framing:** This is not blame. This is data. v2.1.0 has 0 external stars
 and 0 forks at time of writing. We need to understand why before we
 spend more product work on the same shape and expect a different result.
@@ -25,7 +25,7 @@ v2.x is a solid piece of *content* sitting behind two separable problems:
    and the README leads with the install command rather than the
    problem-and-proof.
 
-v3.0's bet — recast the content as Anthropic-Agent-Skill-compatible
+The rewrite's bet — recast the content as Anthropic-Agent-Skill-compatible
 `.skill.md` files — addresses the packaging problem. It does **not** by
 itself address the distribution problem. Both need a deliberate plan.
 
@@ -52,7 +52,7 @@ commands.
 ### What works
 
 - The "born from a real incident" framing is good. It's specific and
-  credible. (We should keep this in v3.0.)
+  credible. (We should keep this in the rewrite.)
 - The Tool Support table is concrete. A reader scanning for "does this
   work with my setup" gets an answer in five seconds.
 - "What It Catches" is a good visual scan target.
@@ -79,7 +79,7 @@ commands.
   on whether you can picture using them. There is no asciicast, no GIF,
   no example of an agent refusing a dangerous command.
 
-### Recommendation for v3.0 README
+### Recommendation for the new README
 
 Restructure the README in this order:
 
@@ -134,7 +134,7 @@ git commit -m "Add AI guardrails"
   install`, no `gh ext install`. Every modern dev tool that wins
   distribution offers at least one of these.
 
-### Recommendation for v3.0
+### Recommendation for the rewrite
 
 - Move the canonical install away from submodules. Options:
   - **`npx catpilot-skills install`** — copies/symlinks the chosen
@@ -148,7 +148,7 @@ git commit -m "Add AI guardrails"
   pinned, audited, fork-controlled versions. Don't lead with it.
 - Move skills out of `.github/`. Use `skills/` (or `.claude/skills/` /
   `.cursor/rules/` per runtime). The `.github/` location made sense
-  when the only target was Copilot's `copilot-instructions.md`. v3.0's
+  when the only target was Copilot's `copilot-instructions.md`. the rewrite's
   per-skill-file model doesn't need it.
 - Ship a 3-line `<details>` "is this safe to install?" section in the
   README that links to the audit-friendly file layout: each skill is a
@@ -180,7 +180,7 @@ than "seen and bounced," because even a bad security tool with a real
 release tends to attract a handful of curious stars from the security
 Twitter / Mastodon / Bluesky ecosystem.
 
-### What we should check before v3.0 launch
+### What we should check before the relaunch
 
 - GitHub Insights → Traffic → past 14 days. Clones, unique visitors,
   referrers. Even a few referrers tell us whether anyone shared the
@@ -188,11 +188,11 @@ Twitter / Mastodon / Bluesky ecosystem.
 - Search `site:news.ycombinator.com catpilot-ai-guardrails`,
   `site:reddit.com catpilot-ai-guardrails`, `site:lobste.rs`.
 - `npm` and `pypi` for typosquats / similar names — if the namespace is
-  contested, that affects v3.0 packaging.
+  contested, that affects the new packaging.
 
-### What an actual v3.0 launch looks like
+### What an actual relaunch looks like
 
-If we're treating v2.x as a "soft beta that nobody noticed" and v3.0 as
+If we're treating v2.x as a "soft beta that nobody noticed" and the rewrite as
 the real launch, the launch motion needs to exist. Recommend:
 
 - **One launch artifact.** A blog post on a domain that actually has
@@ -239,7 +239,7 @@ before launch):
   TruffleHog, GitHub secret scanning.
 - "Cursor security rules" — sparse, this is a real opportunity.
 - "Anthropic Agent Skills security" — very sparse, likely a real
-  opportunity for v3.0 if we lead with skill-format compatibility.
+  opportunity for the rewrite if we lead with skill-format compatibility.
 
 ### Recommendations
 
@@ -249,7 +249,7 @@ before launch):
   what this is. "Security skills for coding agents" is more specific
   and competes in a thinner field.
 - **Make the Anthropic Skills compatibility a top-of-fold claim.**
-  This is the actual differentiator in v3.0. If a reader's mental model
+  This is the actual differentiator in the rewrite. If a reader's mental model
   is "I already know what an Agent Skill is," the install becomes
   "drop these files in your skills directory" — much lower trust ask.
 - **Own a few specific search phrases** with content:
@@ -262,14 +262,14 @@ before launch):
   `claude-code`, `cursor`, `anthropic-skills`, `secret-detection`).
 - **The README's H1 should match a query.** Right now it's "Guardrails
   for Coding Agents." Consider "Security Skills for Coding Agents"
-  for v3.0.
+  for the rewrite.
 
 ---
 
-## 5. Concrete recommendations for v3.0 launch motion
+## 5. Concrete recommendations for the relaunch motion
 
 In priority order. (The product changes — `.skill.md`, format spec,
-worked examples — are tracked in `docs/v3-spec/SKILL_FORMAT.md` and the
+worked examples — are tracked in `docs/spec/SKILL_FORMAT.md` and the
 `skills/*.skill.md` files.)
 
 ### Must-have before launch
@@ -280,7 +280,7 @@ worked examples — are tracked in `docs/v3-spec/SKILL_FORMAT.md` and the
    equivalent).** Keep submodule as a secondary documented path.
 3. **Move skills out of `.github/` to `skills/`.**
 4. **One launch blog post on `catpilot.ai`** with the partial-YAML
-   incident as the lead anecdote and the v3.0 worked examples inline.
+   incident as the lead anecdote and the worked examples inline.
 5. **Repo metadata.** Topics, description, social preview image.
 
 ### Should-have
@@ -297,7 +297,7 @@ worked examples — are tracked in `docs/v3-spec/SKILL_FORMAT.md` and the
 
 ### Nice-to-have
 
-10. **Write up the v3.0 spec in a separate post for security-engineer
+10. **Write up the spec in a separate post for security-engineer
     audiences** (positioning: "we wrote down what a security skill
     file should look like; here's the spec").
 11. **Submit to one or two security newsletters** (tldrsec, Risky Biz)
@@ -307,7 +307,7 @@ worked examples — are tracked in `docs/v3-spec/SKILL_FORMAT.md` and the
 
 ---
 
-## 6. What we don't know — instrument before v3.0
+## 6. What we don't know — instrument before launch
 
 To make v3.x launch decisions better than v2.x's, we need data v2.x
 didn't collect. Without violating the OSS = zero phone-home rule, we
@@ -332,8 +332,8 @@ here per architectural commitment.
 ## 7. The honest bottom line
 
 The v2.x content is good. The v2.x distribution effort, as far as we
-can tell, did not happen at meaningful scale. v3.0's format work is
-necessary but not sufficient. If we ship v3.0 with the same launch
+can tell, did not happen at meaningful scale. the rewrite's format work is
+necessary but not sufficient. If we ship the rewrite with the same launch
 motion as v2.x — push to GitHub, hope — we will get the same result.
 
 The work plan should be 60% packaging (which is already mostly drafted

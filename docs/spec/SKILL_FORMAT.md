@@ -1,6 +1,6 @@
 # Skill Format
 
-**Status:** v3.0 draft.
+**Status:** Active.
 **Conformance:** Catpilot skills are valid [Anthropic Agent Skills](https://agentskills.io/specification). The `metadata.catpilot.*` block is a Catpilot extension that other runtimes ignore.
 **Distribution:** Skills install via [`npx skills add`](https://github.com/vercel-labs/skills) and appear on the [skills.sh](https://skills.sh) leaderboard.
 

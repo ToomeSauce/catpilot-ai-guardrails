@@ -1,12 +1,12 @@
 ---
 name: catpilot-security-core
-description: Catpilot's universal AI-coding-agent security baseline. Always-on guardrails covering hardcoded secrets and cloud CLI safety, with more components landing in v3.0-rc.2. Apply on every code generation, file write, and shell command. Born from real production incidents.
+description: Catpilot's universal AI-coding-agent security baseline. Always-on guardrails covering hardcoded secrets and cloud CLI safety, with more components arriving in subsequent releases. Apply on every code generation, file write, and shell command. Born from real production incidents.
 license: MIT
 metadata:
   catpilot:
     bundle:
       name: catpilot-security-core
-      version: 3.0.0-rc.1
+      version: 2026.05.06
       tier: core
       components:
       - id: cloud-cli-safety
