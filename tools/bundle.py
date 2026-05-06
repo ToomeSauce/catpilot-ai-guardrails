@@ -1,4 +1,4 @@
-"""Catpilot v3.0 skill bundler.
+"""Catpilot skill bundler.
 
 Reads source skills under src/skills/<tier>/<name>/SKILL.md and produces
 shipped bundles at skills/<bundle-name>/SKILL.md, in the Anthropic Agent
@@ -10,6 +10,14 @@ Determinism rules (PACKAGING.md §5):
   3. Frontmatter key order is fixed by KEY_ORDER below.
   4. Output uses LF line endings exclusively.
   5. No timestamps appear in output.
+
+Versioning:
+  - Bundles are CalVer (YYYY.MM.DD or YYYY.MM), matching the
+    "content-on-a-rolling-cadence" nature of this repo. The release date is
+    the meaningful signal for users and auditors.
+  - Individual source skills are semver; rename or severity changes are
+    breaking and need to be expressible to downstream consumers (eventually,
+    the SaaS-side dynamic-update pipeline).
 
 Run with --check to re-bundle and diff against the committed skills/ tree
 (used in CI to enforce that skills/ is the deterministic output of src/).
@@ -43,7 +51,9 @@ SEVERITY_ORDER = ["info", "low", "medium", "high", "critical"]
 # Anthropic spec name regex: 1-64 chars, lowercase a-z + digits + hyphens,
 # no leading/trailing/consecutive hyphens.
 NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9]|-(?!-))*[a-z0-9]$|^[a-z0-9]$")
+# Source skills use semver; bundles use CalVer (YYYY.MM.DD or YYYY.MM).
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+CALVER_RE = re.compile(r"^20\d{2}\.(0[1-9]|1[0-2])(?:\.(0[1-9]|[12]\d|3[01]))?(?:[-+][0-9A-Za-z.-]+)?$")
 
 # Stable frontmatter key order. Anything not listed appears after, sorted.
 TOP_KEY_ORDER = ["name", "description", "license", "compatibility", "metadata"]
@@ -346,7 +356,14 @@ def discover_tiers() -> list[Path]:
 
 
 def load_bundle_cfg(tier_dir: Path) -> dict:
-    return tomllib.loads((tier_dir / "bundle.toml").read_text())["bundle"]
+    cfg = tomllib.loads((tier_dir / "bundle.toml").read_text())["bundle"]
+    version = cfg.get("version", "")
+    if not CALVER_RE.match(version):
+        raise ValueError(
+            f"{tier_dir}/bundle.toml: bundle version {version!r} is not CalVer "
+            f"(expected YYYY.MM.DD or YYYY.MM, e.g. 2026.05.06)"
+        )
+    return cfg
 
 
 def build_tier(tier_dir: Path, dist_root: Path) -> Path:
@@ -452,7 +469,7 @@ def cmd_check() -> int:
 
 
 def main(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="bundle.py", description="Catpilot v3.0 skill bundler")
+    p = argparse.ArgumentParser(prog="bundle.py", description="Catpilot skill bundler")
     p.add_argument("--tier", help="build only this tier (matches src/skills/<tier> dir name)")
     p.add_argument("--check", action="store_true", help="verify skills/ is up to date with src/")
     args = p.parse_args(argv)

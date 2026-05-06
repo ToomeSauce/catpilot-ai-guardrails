@@ -1,6 +1,6 @@
 # tools/
 
-Build and validation scripts for the v3.0 skill format.
+Build and validation scripts for the Catpilot skill format.
 
 ## bundle.py
 
@@ -17,11 +17,18 @@ python tools/bundle.py --tier core
 python tools/bundle.py --check
 ```
 
-Determinism contract is in [`docs/v3-spec/PACKAGING.md` §5](../docs/v3-spec/PACKAGING.md). Aggregation rules (severity = max, control_mappings = sorted union, applies_to = union with `any` collapse, components in lexicographic order by id) are in §3.2.
+Determinism contract is in [`docs/spec/PACKAGING.md` §5](../docs/spec/PACKAGING.md). Aggregation rules (severity = max, control_mappings = sorted union, applies_to = union with `any` collapse, components in lexicographic order by id) are in §3.2.
 
 The bundler runs on every PR via `.github/workflows/bundle-check.yml`. If you edit a source skill and forget to rebuild, the check fails with a unified diff pointing at the drift.
 
-### Dependencies
+## Versioning
+
+- **Bundles use CalVer** (`YYYY.MM.DD` or `YYYY.MM`). Set in each tier's `bundle.toml`. The bundler refuses to build a bundle whose version isn't CalVer.
+- **Source skills use semver.** Each `src/skills/<tier>/<name>/SKILL.md` has its own `metadata.catpilot.version` that bumps semver-style on changes to that skill.
+
+CalVer is right for the shipped artifact because this is a content repo on a rolling release cadence — the date of release is the meaningful signal for users and auditors. Semver is right for source skills because rename/severity changes are breaking events that downstream consumers (eventually, the SaaS-side dynamic-update pipeline) need expressed.
+
+## Dependencies
 
 - Python 3.11+ (uses `tomllib` from the stdlib).
 - `pyyaml` for frontmatter parsing.
