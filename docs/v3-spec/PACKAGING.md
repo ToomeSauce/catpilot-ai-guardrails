@@ -1,231 +1,219 @@
-# v3.0 Packaging Strategy — How Skills Are Bundled and Installed
+# Packaging
 
-**Status:** Draft for review
-**Audience:** Maintainers and contributors deciding what end users install
-**Companion to:** [`SKILL_FORMAT.md`](./SKILL_FORMAT.md) (file-level format) and [`V2_DIAGNOSTIC.md`](./V2_DIAGNOSTIC.md) (why v2.x didn't land)
-
----
-
-## 1. The decision this doc makes
-
-Authoring granularity and install granularity are **decoupled** in v3.0:
-
-- **Authoring unit:** one source skill per concern (~9 for core, ~7 framework extensions, ~4 advanced). Lives under `skills/source/`. Independently versioned.
-- **Install unit:** **3 tiers**, each shipping as a single bundle skill under `skills/dist/`. End users install one tier per profile.
-
-Source skills are the unit of diffs, reviews, and SaaS-side updates. Bundle skills are the unit of install. The bundler joins them; see `SKILL_FORMAT.md` §7 for the file-level mechanics.
+**Status:** v3.0 draft.
+**Companion to:** [`SKILL_FORMAT.md`](./SKILL_FORMAT.md).
+**Distribution channel:** [`npx skills add ToomeSauce/catpilot-ai-guardrails`](https://github.com/vercel-labs/skills) → indexed at [skills.sh](https://skills.sh).
 
 ---
 
-## 2. Why decoupling matters
+## 1. The problem
 
-### 2.1 Atomic install would replicate v2.x's adoption tax
+Authoring granularity and install granularity are not the same thing.
 
-`V2_DIAGNOSTIC.md` identifies install friction as the load-bearing reason v2.x sat at zero stars. Asking a developer to install 13+ separate skills — even via `npx` — recreates that friction in a new wrapper. Asking them to *decide which 13 of 30 they want* is worse: the decision burden lands on the person least equipped to make it (someone who showed up looking for "basic AI coding security" and now has to read 30 READMEs).
+**Authoring wants per-concern.** `secret-blocking` and `database-safety` are different rules with different evidence trails, different severities, and different release cadences. Reviewing them together would be a mess. They want their own `SKILL.md` files, their own version numbers, their own change history.
 
-Modern competitors (`awesome-cursor-rules` and similar) ship one folder you copy. v3.0 needs a shape at least that frictionless.
+**Installing wants per-tier.** A user adopting Catpilot does not want to run `npx skills add` 11 times. They want one install for "the security baseline," one install for "the framework I'm using," and optionally one for "the agent-specific advanced stuff." Three installs, total. Most users will only do the first.
 
-### 2.2 Co-active rules don't benefit from separate installs
+The v3.0 layout decouples these. Authors edit small files; users install small numbers of bundles.
 
-The v2.x rule set is heavily co-active:
+## 2. The three tiers
 
-- Secret blocking and secrets-management apply to the same review pass.
-- Cloud CLI safety, Docker safety, and supply-chain hygiene all fire on every deployment-touching change.
-- Generic Python/TypeScript security applies to every code review.
+| Bundle | Source path | Audience | Default install? |
+|---|---|---|---|
+| `catpilot-security-core` | `src/skills/core/` | Every project, every language, every framework. The non-negotiable security baseline. | Yes |
+| `catpilot-<framework>-security` | `src/skills/frameworks/<fw>/` | Projects using the named framework. Auto-detected from `package.json`, `pyproject.toml`, `Gemfile`, etc. | Yes when framework is detected |
+| `catpilot-security-advanced` | `src/skills/advanced/` | Multi-agent systems, agent identity boundaries, cron-driven autonomous workflows. | No (opt-in) |
 
-Splitting them across separate installs gives users 12 chances to forget one, with no benefit because they'd want all of them anyway.
+Total bundles a typical user installs: **1–3.**
 
-### 2.3 The Anthropic Agent Skill model rewards bundles
+### 2.1 `catpilot-security-core`
 
-Skills in Anthropic's runtime are advertised to the model via `description`. The model decides per request which skills to load. With 13 narrow skills, the model performs 13 routing decisions. With one bundle, it performs one — and the body itself is structured (stable per-component subheadings) so the model navigates to relevant rules without loading the full text into working context.
+The skills that apply to any code-generating AI agent regardless of language or framework. ~9 source skills:
 
-Fragmentation is the right shape for **mutually exclusive** skills (e.g. "render Markdown" vs. "format Excel" vs. "draft Slack"). Security guardrails are the opposite shape: always-on, often co-active.
+- `secret-blocking`
+- `cloud-cli-safety`
+- `local-cli-safety`
+- `database-safety`
+- `docker-safety`
+- `secrets-management`
+- `pii-and-test-data`
+- `supply-chain`
+- `language-baseline`
 
-### 2.4 The SaaS update story stays intact
+### 2.2 Framework extensions
 
-Per-component versions live inside the bundle's `catpilot.bundle.components[]` array (see `SKILL_FORMAT.md` §7). The SaaS layer can ship `secret-blocking@3.1.0` inside `catpilot-security-core@3.0.1` without forcing all components to bump. Users see one bundle version; the update layer sees 9 component versions.
+Framework-specific patterns that build on (and assume) the core tier. Initial set: `django`, `fastapi`, `rails`, `express`, `nextjs`, `springboot`, `docker`. Each ships ~3–6 source skills.
 
-Authoring granularity (per concern) ≠ install granularity (per tier). Decoupling them is what makes the SaaS story work without taxing users.
+The bundler emits one bundle per framework, named `catpilot-<framework>-security`. Users install only the bundles for the frameworks their project uses; the skills.sh CLI plus our framework-detection script handles auto-selection.
 
+### 2.3 `catpilot-security-advanced`
+
+Patterns for autonomous agent systems: identity integrity, multi-agent auth, cron security, agent-led code review. Smaller audience, higher complexity. Opt-in.
+
+## 3. Bundling mechanics
+
+The bundler is `tools/bundle.py` (Python, deterministic). Input: a tier directory under `src/skills/`. Output: a single skill directory under `skills/` containing one `SKILL.md` plus copied `references/`, `scripts/`, and `assets/` from each component.
+
+### 3.1 Output frontmatter
+
+A bundle's `SKILL.md` has its own frontmatter, generated mechanically from its components:
+
+```yaml
 ---
-
-## 3. The 3 tiers
-
-### Tier 1 — `catpilot-security-core` (the default install)
-
-**One bundle skill. One install. ~90% of users stop here.**
-
-Ships every baseline rule that fires on any code-review or codegen pass, regardless of stack. Built from these source skills under `skills/source/core/`:
-
-| Source skill | Concern |
-|---|---|
-| `secret-blocking.skill.md` | Hardcoded secrets, known-format token detection, log/echo hygiene |
-| `cloud-cli-safety.skill.md` | Azure / AWS / GCP / k8s / terraform destructive-command guards |
-| `local-cli-safety.skill.md` | `rm -rf`, `chmod 777`, `0.0.0.0` binds, key exfiltration |
-| `database-safety.skill.md` | Schema-destructive ops without confirmation, plaintext credentials |
-| `docker-safety.skill.md` | Floating tags, `USER root`, `ENV SECRET=`, missing health checks |
-| `secrets-management.skill.md` | Vaults, `.env` hygiene, least-privilege scopes |
-| `pii-and-test-data.skill.md` | Production data in fixtures, PII in logs |
-| `supply-chain.skill.md` | Pinned versions, lockfiles, `curl … | sh` from unknown sources |
-| `language-baseline.skill.md` | Generic Python / TypeScript security patterns (eval/exec, deserialization) |
-
-The two skills already authored (`secret-blocking.skill.md` and `cloud-cli-safety.skill.md`) sit in `skills/source/core/` and are starting points for the bundle. The remaining seven are tracked migration work from `copilot-instructions.md` and `FULL_GUARDRAILS.md`.
-
-Shipped artifact: `skills/dist/catpilot-security-core.skill.md`. Body target ~20–28 KB — large but well under the ~50 KB ceiling where Anthropic Agent Skill loaders start to degrade, and well under v2.x's 32 KB monofile cap.
-
-### Tier 2 — Framework extensions (auto-detected, opt-in)
-
-**Additive bundles, installed automatically when the installer detects a framework. User experience: still one yes/no prompt.**
-
-Each extension declares `catpilot.bundle.depends_on: [catpilot-security-core]` and ships small (~5–15 framework-specific rules). No content duplication with core.
-
-| Bundle | Source location |
-|---|---|
-| `catpilot-django-security` | `skills/source/frameworks/django.skill.md` |
-| `catpilot-fastapi-security` | `skills/source/frameworks/fastapi.skill.md` |
-| `catpilot-rails-security` | `skills/source/frameworks/rails.skill.md` |
-| `catpilot-express-security` | `skills/source/frameworks/express.skill.md` |
-| `catpilot-nextjs-security` | `skills/source/frameworks/nextjs.skill.md` |
-| `catpilot-springboot-security` | `skills/source/frameworks/springboot.skill.md` |
-| `catpilot-docker-security` | `skills/source/frameworks/docker.skill.md` (compose / k8s patterns beyond core Dockerfile rules) |
-
-Framework extensions in v3.0 are single-source-skill bundles. The bundler handles them identically to multi-source bundles; the components array just has length 1.
-
-The installer's existing v2.x framework-detection logic (in `setup.sh`) ports cleanly to drive auto-detection.
-
-### Tier 3 — `catpilot-security-advanced` (optional)
-
-**For teams running agentic / multi-agent systems.**
-
-Built from these source skills under `skills/source/advanced/`:
-
-- `agent-identity-integrity.skill.md`
-- `multi-agent-auth.skill.md`
-- `cron-security.skill.md`
-- `prompt-injection-tool-gating.skill.md`
-
-Opt-in because most solo devs and traditional web-app teams don't need it. Teams building OpenClaw-style or Catpilot-style systems do.
-
-### Net install experience
-
-| User profile | Bundles installed | User-facing decisions |
-|---|---|---|
-| Solo dev, plain Python | core | 1 (yes/no) |
-| Django shop | core + django | 1 (yes/no) — auto-detected |
-| Next.js + Docker team | core + nextjs + docker | 1 (yes/no) — auto-detected |
-| Agentic-systems team | core + framework + advanced | 1–2 |
-
-This is the right knob. End users don't feel the source-skill decomposition; the SaaS update layer does.
-
+name: catpilot-security-core
+description: |
+  Catpilot's universal AI-coding-agent security baseline. Bundles 9 always-on
+  guardrails covering secrets, cloud CLI safety, local shell safety, database
+  ops, docker, secrets management, PII handling, supply-chain integrity, and
+  per-language baselines. Apply on every code generation, file write, and
+  shell command. Born from real production incidents.
+license: MIT
+metadata:
+  catpilot:
+    bundle:
+      name: catpilot-security-core
+      version: 3.0.0
+      tier: core
+      components:
+        - id: secret-blocking
+          version: 1.0.0
+        - id: cloud-cli-safety
+          version: 1.0.0
+        # ... one row per source skill
+    severity: critical                    # max(component severities)
+    control_mappings:                     # union of all components
+      soc2: [CC6.1, CC6.6, CC7.2, CC8.1, A1.2]
+      pci_dss: ["3.4", "3.5", "3.6", "6.4.5", "6.4.5.2", "8.2.1", "10.2"]
+      iso_27001: [A.9.4.3, A.10.1.1, A.10.1.2, A.12.1.2, A.12.5.1, A.14.2.2, A.14.2.3]
+      nist_csf: [PR.AC-1, PR.DS-1, PR.DS-5, PR.IP-1, PR.IP-3, DE.CM-7, RS.MI-2]
+      owasp_top_10: ["A02:2021", "A05:2021", "A07:2021", "A08:2021"]
+    applies_to:
+      languages: [any]
+      frameworks: [any]
+      runtimes: [claude-code, cursor, openclaw, cline, aider, github-copilot, codex]
 ---
-
-## 4. Repo layout
-
-```
-catpilot-ai-guardrails/
-├── docs/
-│   └── v3-spec/
-│       ├── SKILL_FORMAT.md          # file format
-│       ├── PACKAGING.md             # this doc
-│       ├── V2_DIAGNOSTIC.md         # adoption analysis
-│       └── README.md                # index
-├── skills/
-│   ├── source/                      # AUTHORING granularity
-│   │   ├── core/                    # → bundles into catpilot-security-core
-│   │   │   ├── secret-blocking.skill.md         ✓ done
-│   │   │   ├── cloud-cli-safety.skill.md        ✓ done
-│   │   │   ├── local-cli-safety.skill.md        (migration)
-│   │   │   ├── database-safety.skill.md         (migration)
-│   │   │   ├── docker-safety.skill.md           (migration)
-│   │   │   ├── secrets-management.skill.md      (migration)
-│   │   │   ├── pii-and-test-data.skill.md       (migration)
-│   │   │   ├── supply-chain.skill.md            (migration)
-│   │   │   └── language-baseline.skill.md       (migration)
-│   │   ├── frameworks/              # → one bundle per framework
-│   │   │   └── (migration from frameworks/*/condensed.md)
-│   │   └── advanced/                # → bundles into catpilot-security-advanced
-│   │       └── (migration)
-│   └── dist/                        # SHIPPING granularity (generated)
-│       ├── catpilot-security-core.skill.md
-│       ├── catpilot-django-security.skill.md
-│       └── catpilot-security-advanced.skill.md
-└── (existing v2.x files on main: copilot-instructions.md, setup.sh, frameworks/, etc.)
 ```
 
-The two existing source skills are real — production-grade content authored against the spec. The (migration) entries are tracked work that follows once this packaging strategy is approved.
+### 3.2 Aggregation rules
+
+| Bundle field | Source |
+|---|---|
+| `name` | Constant per tier (`catpilot-security-core`, `catpilot-django-security`, `catpilot-security-advanced`). |
+| `description` | Hand-curated per tier. The bundler enforces ≤1024 chars but does not generate the prose. |
+| `license` | Inherited from `LICENSE` at repo root (MIT). |
+| `metadata.catpilot.bundle.version` | Hand-set in `bundle.toml` at the tier root. Bumped per release. |
+| `metadata.catpilot.bundle.components[]` | Auto-listed from source skills, with their individual versions. |
+| `metadata.catpilot.severity` | `max(component severities)` using the ordering `info < low < medium < high < critical`. |
+| `metadata.catpilot.control_mappings.<fw>` | `union(component[*].control_mappings.<fw>)`, sorted, deduplicated. |
+| `metadata.catpilot.applies_to.languages` | `union(...)`, with `any` collapsing the set. |
+| `metadata.catpilot.applies_to.frameworks` | `union(...)`, with `any` collapsing the set. |
+| `metadata.catpilot.applies_to.runtimes` | `intersection(...)` if all components specify; else `union`. |
+
+### 3.3 Body composition
+
+The bundler concatenates component bodies under stable subheadings, in lexicographic-by-id order:
+
+```markdown
+# Catpilot Security Core
+
+[hand-curated bundle preamble: ~50 words explaining the bundle, when to apply, link to source]
 
 ---
 
-## 5. The bundler
+## secret-blocking
 
-A small, deterministic build script. Inputs: `skills/source/<tier>/...`. Outputs: `skills/dist/*.skill.md`.
-
-**Determinism requirements:**
-
-1. Stable component order (taken from a `bundle-manifests/<tier>.yaml` config or sorted alphabetically — TBD, low-stakes).
-2. Stable `### <component-id>` heading slugs in the body.
-3. No timestamps, no build-host info, no random IDs in the output.
-4. Two builds from the same source tree produce byte-identical bundle files.
-
-**Aggregation logic** (per `SKILL_FORMAT.md` §7.3):
-
-- Bundle `severity` = max(component.severity).
-- Bundle `control_mappings.<framework>` = sorted union(component values).
-- Bundle `applies_to.languages` / `.frameworks` = intersection if all components specify, else `[any]`.
-- Per-component `version` recorded in `catpilot.bundle.components[]`.
-
-**Implementation:** ~150 lines of Python or Go. Runs in CI on every PR; bundles are committed (so end users cloning `dist/` get them without running the bundler) and CI verifies they match what the bundler would produce.
-
-This doc doesn't prescribe the language. The bundler is small and replaceable; what matters is the determinism contract.
+<verbatim body of src/skills/core/secret-blocking/SKILL.md>
 
 ---
+
+## cloud-cli-safety
+
+<verbatim body of src/skills/core/cloud-cli-safety/SKILL.md>
+
+---
+
+[...]
+```
+
+Component headings use the source skill's `metadata.catpilot.id` so that an agent reading the bundle can map specific findings back to a source skill (and to its version, control mappings, and provenance).
+
+### 3.4 Companion files
+
+`references/`, `scripts/`, and `assets/` from each component are copied into the bundle directory under namespaced subpaths:
+
+```
+skills/catpilot-security-core/
+├── SKILL.md
+├── references/
+│   ├── secret-blocking/
+│   │   └── REFERENCE.md
+│   └── cloud-cli-safety/
+│       └── INCIDENT.md
+├── scripts/
+│   └── secret-blocking/
+│       └── scan.py
+└── assets/
+```
+
+Cross-component file references inside `SKILL.md` bodies are rewritten by the bundler to use the namespaced paths.
+
+## 4. Per-component versioning inside a bundle
+
+Bundles ship a single user-visible version (`bundle.version`), but the components inside have their own versions. This matters for SaaS-side dynamic updates (out of scope for OSS) and for change tracking:
+
+- `secret-blocking@1.4.0` can ship inside `catpilot-security-core@3.2.0` without forcing every other component to bump.
+- The bundle's `components[]` list lets a runtime (or a curious user) see exactly which source-skill versions are baked in.
+- Bumping a component is a minor bump on the bundle. Removing one is a major.
+
+## 5. Determinism
+
+The bundler is required to be deterministic: same input tree → byte-identical output. This is enforced in CI (`tools/bundle.py --check` re-bundles and diffs against the committed `skills/` tree).
+
+Determinism rules:
+
+1. Component ordering: lexicographic by `metadata.catpilot.id`.
+2. List-valued aggregations (`control_mappings`, `applies_to`, etc.): sorted alphabetically, deduplicated.
+3. Frontmatter key ordering: stable schema (defined in `tools/bundle.py`).
+4. Newlines: LF only. Bundler enforces.
+5. No timestamps in output.
 
 ## 6. Distribution
 
-Recommendation, not commitment. Tracked as an open question in `README.md`'s decision log.
+Catpilot does not ship a custom installer. Users install bundles via the [skills.sh](https://skills.sh) CLI:
 
-**Primary: npm.** `npx @catpilot/ai-guardrails install`. One command, auto-detects framework, installs the right tier mix per detected runtime (`~/.claude/skills/`, `.cursor/rules/`, `~/.openclaw/skills/`, etc.).
+```bash
+# install the core bundle
+npx skills add ToomeSauce/catpilot-ai-guardrails --skill catpilot-security-core
 
-**Alternatives:**
-- **pip** — fast-follow for Python-only shops post-v3.0.
-- **brew** — later, macOS-only.
-- **Legacy submodule + `setup.sh`** — stays available through v3.x for existing users; README points new users at npm.
+# install core + the framework you're using
+npx skills add ToomeSauce/catpilot-ai-guardrails \
+  --skill catpilot-security-core \
+  --skill catpilot-django-security
 
-The packaging strategy in this doc is **distribution-agnostic**. Whatever wrapper we ship (`npx`, `pip install`, `brew install`, manual clone) the user-facing experience is the same: install one bundle per tier, auto-detect framework extensions.
+# install everything
+npx skills add ToomeSauce/catpilot-ai-guardrails --all
+```
 
----
+The CLI handles per-runtime installation (Claude Code, Cursor, OpenClaw, …) — 51 supported agents at time of writing.
 
-## 7. Bundle vs source — quick reference for contributors
+A small `tools/recommend.py` helper (PR #3, follow-up) reads a project's manifests (`package.json`, `pyproject.toml`, `Gemfile`, `Cargo.toml`, `go.mod`, …), recommends the right framework bundles, and prints the corresponding `npx skills add` invocation for the user to run.
 
-| You are… | Touch this | Don't touch this |
-|---|---|---|
-| Adding a new rule | A source skill in `skills/source/<tier>/...` | `skills/dist/...` (regenerated by bundler) |
-| Adding a framework | A new `skills/source/frameworks/<framework>.skill.md` | The bundler config (it picks up new files automatically) |
-| Promoting an experimental rule to GA | Bump source skill version, the bundler picks up the change on next CI run | The bundle frontmatter (the bundler computes it) |
-| Reading what end users see | A `skills/dist/*.skill.md` bundle | A source skill (it's a build input) |
+## 7. Why not ship the source skills directly?
 
-If a contributor is editing `skills/dist/*.skill.md` directly, the PR is wrong; they want a source file.
+We could put each source skill at `skills/<name>/SKILL.md` and let users install them individually. We do not, for three reasons:
 
----
+1. **Install friction.** ~13 individual installs vs. 1 bundle install for the same coverage. Bundle wins.
+2. **Coherent prompts.** A single SKILL.md per bundle gives the agent one coherent context to reason from. Many small skills mean many separate activations.
+3. **Versioning surface.** Bumping 13 skills independently in a public CLI ecosystem creates more update toil than value.
 
-## 8. Open questions
+The source-vs-bundle split is the right tradeoff: authors get fine-grained control, users get coarse-grained installs.
 
-1. **Tier 3 naming — `catpilot-security-advanced` or `catpilot-security-agentic`?** "Agentic" is more descriptive but the term is overloaded across the market. Leaning `advanced`.
-2. **Compliance mapping default set.** Spec defaults to NIST CSF, SOC2, ISO 27001, PCI DSS, OWASP Top 10. Add HIPAA / GDPR for v3.0, or keep tight and grow later? Keeping tight reduces validator surface.
-3. **Distribution path lock-in.** Pull `npx` from "recommended" to LOCKED in the decision log now, or defer to v3.0 launch? The packaging strategy is robust to either.
-4. **Bundler language.** Python (lower deps for contributors, matches Catpilot platform) or Go (single static binary, no install)? Low-stakes; can be revisited.
+## 8. What this PR does not include
 
----
-
-## 9. Decisions made in this doc (assuming approval)
-
-| # | Decision | Rationale |
-|---|---|---|
-| A | Authoring unit = source skill (per concern); install unit = bundle (per tier) | Decouples SaaS update granularity from user install friction |
-| B | 3 tiers: core / framework extensions / advanced | Matches user profiles; all but advanced auto-installed |
-| C | Source skills live under `skills/source/<tier>/...` | Disjoint from `skills/dist/` so the unit of authorship is unambiguous |
-| D | Bundles live under `skills/dist/...`, generated by the bundler, committed | Reproducible, no install-time build, end users get bundles directly from clones |
-| E | Bundle frontmatter records per-component versions in `catpilot.bundle.components[]` | Preserves SaaS update story without leaking it to end-user UX |
-| F | Bundler aggregates severity (max), control mappings (union), applies-to (intersection or `any`) | Mechanical; no hand-edited bundle metadata |
-
-When approved, these flip to LOCKED in the v3-spec README decision log.
+- The bundler itself (`tools/bundle.py`) — follow-up PR.
+- The validator (`tools/validate-skill.py`) — follow-up PR.
+- The framework-detection helper (`tools/recommend.py`) — follow-up PR.
+- The remaining 7 core source skills (`local-cli-safety`, `database-safety`, `docker-safety`, `secrets-management`, `pii-and-test-data`, `supply-chain`, `language-baseline`) — follow-up PRs.
+- Framework extension content — follow-up PRs, one per framework.
+- Advanced tier content — follow-up PR.
+- The new `README.md` on `main` — follow-up PR (timed with v3.0-rc tag).

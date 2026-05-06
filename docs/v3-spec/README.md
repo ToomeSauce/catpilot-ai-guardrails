@@ -1,84 +1,68 @@
 # v3.0 Spec — Index
 
-**Status:** Draft for Basil review
-**Branch:** `v3-spec`
-**Scope:** OSS skill format and packaging redesign for the v3.0 rebrand. SaaS-side architecture is out of scope for this PR.
+**Status:** Draft for review (PR #2).
+**Branch:** `v3-spec-skillsh`.
+**Scope:** Realign the v3.0 spec to the [Anthropic Agent Skills](https://agentskills.io/specification) format and the [skills.sh](https://skills.sh) distribution channel.
 
 ---
+
+## Why this PR exists
+
+PR #1 landed a v3.0 spec built around a `<name>.skill.md` flat-file format and a custom installer. Investigating skills.sh revealed two things:
+
+1. The Anthropic Agent Skills format — directories named `<skill-name>/` containing a `SKILL.md` file plus optional `scripts/`, `references/`, `assets/` — is the de facto ecosystem standard. 51+ AI coding agents already install skills in that shape via `npx skills add`.
+2. Catpilot ships a custom installer ⇒ we maintain a 51-runtime install matrix forever. Catpilot ships in the standard shape ⇒ existing tooling handles every runtime for free, and our skills appear on the public skills.sh leaderboard.
+
+PR #2 is the realignment. The strategic decisions from PR #1 (3-tier bundling, source-vs-shipped split, zero phone-home OSS) are unchanged. The file format and distribution path are the things that change.
 
 ## What's in this PR
 
-This PR adds the v3.0 spec and two production-grade worked examples. It does not modify any v2.x file on `main` — `copilot-instructions.md`, `FULL_GUARDRAILS.md`, `setup.sh`, and `frameworks/*` are all untouched. v2.x content keeps shipping until the v3.0 migration is complete.
-
 | File | Purpose |
 |---|---|
-| [`docs/v3-spec/SKILL_FORMAT.md`](./SKILL_FORMAT.md) | The skill format specification. Anthropic Agent Skill superset with a `catpilot:` extension block. Includes §7 Bundles for the tiered packaging shape. Required reading for anyone authoring a skill. |
-| [`docs/v3-spec/PACKAGING.md`](./PACKAGING.md) | The packaging strategy. Decouples authoring granularity (per concern) from install granularity (per tier). 3 tiers: `catpilot-security-core`, framework extensions, `catpilot-security-advanced`. End users install one tier per profile. |
-| [`docs/v3-spec/V2_DIAGNOSTIC.md`](./V2_DIAGNOSTIC.md) | The zero-stars memo. Candid analysis of why v2.x didn't land and what v3.0's launch needs to look like. |
-| [`skills/source/core/secret-blocking.skill.md`](../../skills/source/core/secret-blocking.skill.md) | Worked example #1. Production-ready source skill covering 40+ secret patterns. Becomes a component of the `catpilot-security-core` bundle. |
-| [`skills/source/core/cloud-cli-safety.skill.md`](../../skills/source/core/cloud-cli-safety.skill.md) | Worked example #2. Born from the partial-YAML incident. Covers Azure / AWS / GCP / k8s / helm / terraform. Also a component of `catpilot-security-core`. |
-| [`docs/v3-spec/README.md`](./README.md) | This index. |
+| [`docs/v3-spec/SKILL_FORMAT.md`](./SKILL_FORMAT.md) | Rewritten. Catpilot skills are valid Anthropic Agent Skills. Catpilot extensions live under `metadata.catpilot.*`. Validation rules and the severity scale are preserved from PR #1. |
+| [`docs/v3-spec/PACKAGING.md`](./PACKAGING.md) | Rewritten. Three tiers, bundler mechanics, deterministic output, distribution via `npx skills add`. The custom installer is dropped. |
+| [`docs/v3-spec/V2_DIAGNOSTIC.md`](./V2_DIAGNOSTIC.md) | Unchanged. |
+| [`docs/v3-spec/README.md`](./README.md) | This file. |
+| [`src/skills/core/secret-blocking/SKILL.md`](../../src/skills/core/secret-blocking/SKILL.md) | Migrated worked example. Same content as PR #1; new layout (directory + `SKILL.md`) and new frontmatter (`metadata.catpilot.*` instead of top-level `catpilot:`). |
+| [`src/skills/core/cloud-cli-safety/SKILL.md`](../../src/skills/core/cloud-cli-safety/SKILL.md) | Same as above. |
 
----
+The deleted files from PR #1 (`skills/source/core/*.skill.md`) appear in the diff as removals — they have been replaced by the new layout under `src/skills/core/<name>/SKILL.md`.
 
-## Architectural decisions locked in this PR
+## Architectural decisions — current state
 
-These are the commitments the spec is built on. They aren't up for relitigation here.
+Decisions from PR #1, with their status under PR #2:
 
-1. **OSS = static skills + run locally + zero phone-home.** No telemetry, no crash reports, no remote skill loading. Load-bearing — the whole reason a skeptical engineer will install this is because the install is auditable and the artifacts are inert.
-2. **SaaS = dynamic skills fed by Catpilot's existing security event collector under commercial agreement.** Out of scope for this PR. Not designed here, not described here.
-3. **Format = Anthropic Agent Skill superset.** A `.skill.md` is a valid Anthropic Agent Skill plus an optional `catpilot:` metadata block. Non-Catpilot runtimes ignore the extension and load the file normally.
-4. **File extension: `.skill.md`.** Greppable, unambiguous, distinct from generic `.md` content.
-5. **Naming: kebab-case.** Filename matches the `catpilot.id` field.
-6. **Severity scale:** `critical | high | medium | low | info`.
-7. **Control-mapping defaults:** SOC2, PCI-DSS, ISO 27001, NIST CSF, OWASP Top 10. Optional per-skill but recommended on `critical` skills.
-8. **Packaging: 3-tier bundles.** Authoring unit = source skill (per concern). Install unit = bundle (per tier). End users see one install per tier; the SaaS update story uses per-component versions inside bundle frontmatter. See `PACKAGING.md`.
-9. **Source vs. dist split.** Source skills live under `skills/source/<tier>/...`. Bundle skills live under `skills/dist/...` and are generated by the bundler. Source skills are the unit of authorship; bundles are the unit of shipping.
-10. **OpenClaw is supported on neutral footing** with Claude Code, Cursor, Cline, Aider, Codex CLI, and GitHub Copilot. No promotion.
-
----
-
-## Decision log
-
-| # | Decision | Status | Notes |
+| # | Decision | Status | PR #2 change |
 |---|---|---|---|
-| 1 | OSS is zero-phone-home | LOCKED | Architectural commitment. |
-| 2 | SaaS uses event collector under commercial agreement | LOCKED | Out of scope this PR. |
-| 3 | Skill format is Anthropic Agent Skill superset | LOCKED | `SKILL_FORMAT.md`. |
-| 4 | File extension `.skill.md` | LOCKED | `SKILL_FORMAT.md` §2.1. |
-| 5 | Severity scale critical/high/medium/low/info | LOCKED | `SKILL_FORMAT.md` §3.3. |
-| 6 | Control mappings: SOC2, PCI-DSS, ISO 27001, NIST CSF, OWASP | LOCKED | Optional per-skill. |
-| 7 | 3-tier packaging (core / framework extensions / advanced) | LOCKED | `PACKAGING.md` + `SKILL_FORMAT.md` §7. |
-| 8 | Source skills under `skills/source/<tier>/`, bundles under `skills/dist/` | LOCKED | `SKILL_FORMAT.md` §2.3. |
-| 9 | Bundle frontmatter records per-component versions | LOCKED | `SKILL_FORMAT.md` §7.1. |
-| 10 | Bundler aggregates severity (max), control mappings (union) | LOCKED | `SKILL_FORMAT.md` §7.3. |
-| 11 | Install distribution path | OPEN | Recommend `npx`. Decide before v3.0 launch. |
-| 12 | Tier 3 naming: `advanced` vs `agentic` | OPEN | Leaning `advanced`. |
-| 13 | Compliance set additions (HIPAA / GDPR for v3.0?) | OPEN | Keep tight or expand. |
-| 14 | Bundler implementation language (Python vs Go) | OPEN | Low-stakes. |
-| 15 | Validator implementation | OPEN | Required before v3.0 launch. |
-| 16 | Migration of remaining v2.x rule categories to source skills | OPEN | Tracking issue recommended. |
-| 17 | Launch motion (blog, HN, etc.) | OPEN | `V2_DIAGNOSTIC.md` has the recommendation. |
+| 1 | OSS is zero-phone-home | LOCKED | unchanged |
+| 2 | SaaS uses event collector under commercial agreement (out of scope for OSS) | LOCKED | unchanged |
+| 3 | Catpilot skills are Anthropic Agent Skill superset | LOCKED | unchanged in spirit; **conformance now exact**, not "superset" |
+| 4 | File extension `.skill.md` | **REVERSED** | Now: directory `<skill-name>/` + `SKILL.md` (Anthropic spec). Catpilot does not invent a new extension. |
+| 5 | Severity scale critical/high/medium/low/info | LOCKED | unchanged |
+| 6 | Control mappings: SOC2, PCI-DSS, ISO 27001, NIST CSF, OWASP | LOCKED | unchanged |
+| 7 | 3-tier packaging (core / framework extensions / advanced) | LOCKED | unchanged |
+| 8 | Source under `skills/source/<tier>/`, bundles under `skills/dist/` | **AMENDED** | Now: source under `src/skills/<tier>/<name>/SKILL.md` (outside `skills/`, ignored by skills.sh CLI). Bundles under `skills/<bundle-name>/SKILL.md` (visible to skills.sh CLI). |
+| 9 | Bundle frontmatter records per-component versions | LOCKED | unchanged; now lives under `metadata.catpilot.bundle.components[]` |
+| 10 | Bundler aggregates severity (max), control mappings (union) | LOCKED | unchanged |
+| 11 | Install distribution path | **LOCKED in this PR** | `npx skills add ToomeSauce/catpilot-ai-guardrails`. No custom installer. |
+| 12 | Tier 3 naming: `advanced` vs `agentic` | **LOCKED** | `advanced`. |
+| 13 | Compliance set additions (HIPAA / GDPR for v3.0?) | **LOCKED** | Keep v3.0 tight: SOC2, PCI-DSS, ISO 27001, NIST CSF, OWASP. HIPAA/GDPR in v3.1. |
+| 14 | Bundler implementation language | **LOCKED** | Python (matches Catpilot stack). |
+| 15 | Validator implementation | OPEN | Will be Python. Tracking issue follows. |
+| 16 | Migration of remaining v2.x rule categories to source skills | OPEN | Tracked. Plan: 7 more core skills, framework extensions, advanced tier. |
+| 17 | Launch motion (blog, HN, etc.) | OPEN | Recommendation in `V2_DIAGNOSTIC.md`. |
 
----
+## Reading order for review (~25 min)
 
-## Reading order for review
-
-Suggested ~30 min review:
-
-1. **This file** (you are here) — 2 min, sets context.
-2. **`PACKAGING.md`** — 8 min, the headline decision (3-tier bundling).
-3. **`SKILL_FORMAT.md`** — 15 min, the substantive spec work. §7 Bundles is the new section that ties to PACKAGING.
-4. **`skills/source/core/secret-blocking.skill.md`** — 3 min, sanity-check the format against a real source skill.
-5. **`skills/source/core/cloud-cli-safety.skill.md`** — 3 min, sanity-check the incident-derived narrative shape.
-6. **`V2_DIAGNOSTIC.md`** — skim, the launch-motion question.
-
----
+1. **This file** — context for why PR #2 exists (3 min).
+2. **`PACKAGING.md`** — three tiers, bundler aggregation rules, distribution via skills.sh (8 min).
+3. **`SKILL_FORMAT.md`** — frontmatter shape, validation rules, body conventions (12 min).
+4. **`src/skills/core/secret-blocking/SKILL.md`** — sanity-check the format on real content (2 min).
 
 ## What this PR is not
 
-- Not a v3.0 release. The version-stamped artifacts (`copilot-instructions.md` v3.0, `FULL_GUARDRAILS.md` v3.0, `setup.sh` v3.0) are not in this PR. v2.x content on `main` is untouched.
-- Not a launch. Distribution work (blog post, Show HN, README rewrite, install path change) is recommended in `V2_DIAGNOSTIC.md` but not executed here.
-- Not the bundler. `PACKAGING.md` §5 specifies the determinism contract; the actual implementation is downstream.
-- Not the full content migration. Two of the ~9 core source skills are authored; the remaining seven (and all framework extensions and advanced skills) are tracked migration work.
-- Not a SaaS architecture document. SaaS-side is explicitly out of scope.
+- Not the bundler. (Specified in PACKAGING §3–5; implementation is a follow-up PR.)
+- Not the validator. (Specified in SKILL_FORMAT §6; implementation is a follow-up PR.)
+- Not new content. The two source skills are migrated 1:1 from PR #1; only the layout and frontmatter change.
+- Not a new README on main. v2.x README stays put until v3.0-rc.
+- Not a v3.0 release.
