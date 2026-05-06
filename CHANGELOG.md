@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+Releases from `2026.05.06` forward use [CalVer](https://calver.org) (`YYYY.MM.DD`). Source-skill components inside each release continue to use [SemVer](https://semver.org).
+
+## [2026.05.06] — 2026-05-06
+
+### Changed
+
+- **Repo realigned to the [Anthropic Agent Skills](https://agentskills.io/specification) format.** Skills are now directories named `<skill>/` containing a `SKILL.md` file with YAML frontmatter, exactly matching the Anthropic spec. Catpilot-specific extensions live under `metadata.catpilot.*`, which other runtimes ignore.
+- **Distribution moved to [skills.sh](https://skills.sh) (`vercel-labs/skills`).** The new install command is `npx skills add catpilotai/catpilot-ai-guardrails --skill catpilot-security-core`. 51+ AI coding agents supported (Claude Code, Cursor, Codex, OpenClaw, Cline, Aider, GitHub Copilot, OpenCode, etc.).
+- **Versioning split.** Releases are CalVer (`YYYY.MM.DD`); source-skill components stay semver. The bundler validates both regimes.
+
+### Added
+
+- **`catpilot-security-core` bundle** — the always-on security baseline. Two components shipping in this release:
+  - `secret-blocking@1.0.0` — hardcoded secrets, API keys, tokens, OAuth credentials, JWT signing keys, DB URLs with embedded creds.
+  - `cloud-cli-safety@1.0.0` — partial-YAML resets, `terraform apply -auto-approve`, `kubectl delete namespace`, recursive S3 deletes, the universal six-step protocol for any cloud-modifying command.
+- **Spec docs** under `docs/spec/`: `SKILL_FORMAT.md` (frontmatter shape, validation, severity scale, body conventions), `PACKAGING.md` (three tiers, bundler mechanics, distribution), `V2_DIAGNOSTIC.md` (one-page postmortem on v2.x distribution).
+- **Deterministic bundler** at `tools/bundle.py` (~370 LOC, Python 3.11+). Aggregates severity (max), control mappings (sorted union), `applies_to` (union with `any` collapse). CalVer-validated bundle versions, semver-validated component versions.
+- **CI gate** at `.github/workflows/bundle-check.yml`. Runs `python tools/bundle.py --check` on every PR; fails with a unified diff if `skills/` drifts from `src/skills/`.
+- **Three packaging tiers** locked: `catpilot-security-core` (always-on), `catpilot-<framework>-security` (per-framework extensions), `catpilot-security-advanced` (multi-agent / opt-in). Only core ships in this release; the other two are planned.
+- **Compliance set** locked: SOC 2, PCI-DSS, ISO 27001, NIST CSF, OWASP Top 10. HIPAA and GDPR follow in a later release.
+
+### Deprecated
+
+- **Submodule + bash installer (`setup.sh`)** — still works for v2.x users, but the new install path is `npx skills add`. The script will print a deprecation notice when run.
+- **`copilot-instructions.md` and `FULL_GUARDRAILS.md`** — monolithic v2.x rule files. Their content is being migrated into per-concern source skills under `src/skills/`. Files remain on `main` until the migration completes.
+- **`frameworks/*` directories** — v2.x framework patterns (`FULL_*.md` + `condensed.md`). Migrating into `src/skills/<framework>/` extension skills as part of the next release cadence.
+
+### Architectural decisions locked
+
+- OSS = zero phone-home, ever. No telemetry, no crash reports, no anonymous events. SaaS-side dynamic skill updates are a separate workstream under commercial agreement.
+- Conformance: exact Anthropic Agent Skills, not "superset."
+- Tier 3 name: `catpilot-security-advanced` (not `agentic`).
+- Distribution: `npx skills add catpilotai/catpilot-ai-guardrails`. No custom installer.
+- Bundler implementation language: Python.
+
 ## [2.1.0] — 2026-03-06
 
 ### Added
