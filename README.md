@@ -7,7 +7,7 @@
 
 ![Release](https://img.shields.io/badge/release-2026.05.06-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Format](https://img.shields.io/badge/format-Anthropic%20Agent%20Skills-7B3FE4)
 
-Security skills for AI coding agents — installable into Claude Code, Cursor, Codex, OpenClaw, Cline, Aider, GitHub Copilot, OpenCode, and 40+ other agents with one command.
+Security skills for AI coding agents — installable into Claude Code, Cursor, Codex, OpenClaw, Cline, Aider, GitHub Copilot, OpenCode, and 40+ other agents with one command. Also natively consumable by [Hermes Agent](https://hermes-agent.nousresearch.com) via its built-in skills system.
 
 Born from a real incident where an agent wiped production environment variables with a partial YAML update. The rules in this repo come from incidents like that one — battle-tested, dogfooded daily at [Catpilot.ai](https://catpilot.ai), MIT-licensed.
 
@@ -57,6 +57,14 @@ git clone https://github.com/catpilotai/catpilot-ai-guardrails.git
 cp -r catpilot-ai-guardrails/skills/catpilot-security-core ~/.claude/skills/
 ```
 
+### Hermes Agent
+
+[Hermes Agent](https://hermes-agent.nousresearch.com) (Nous Research) has its own native skills system that reads from skills.sh. From inside Hermes:
+
+```
+/skills install catpilotai/catpilot-ai-guardrails/catpilot-security-core
+```
+
 ## Versioning
 
 - **Releases** are CalVer (`YYYY.MM.DD`). Current release: **`2026.05.06`**.
@@ -102,10 +110,6 @@ PRs welcome — propose a new rule, fix a false positive, add a control mapping,
 | Advanced (multi-agent / opt-in) | `catpilot-security-advanced` | planned |
 
 Validator (`tools/validate-skill.py`) and framework-detection helper (`tools/recommend.py`) follow.
-
-## Migrating from v2.x
-
-If you're on a v2.x install (`git submodule add … && ./setup.sh`), the v2 files in this repo (`copilot-instructions.md`, `FULL_GUARDRAILS.md`, `setup.sh`, `frameworks/*`) still work — they're soft-deprecated, not removed. New installs should use the skills.sh path above. Migration guide lands as those files are ported into the new source-skills layout.
 
 ## License
 
