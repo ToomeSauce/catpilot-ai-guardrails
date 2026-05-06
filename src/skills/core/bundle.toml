@@ -1,0 +1,33 @@
+[bundle]
+name = "catpilot-security-core"
+tier = "core"
+version = "3.0.0-rc.1"
+category = "security"
+
+description = """
+Catpilot's universal AI-coding-agent security baseline. Always-on guardrails
+covering hardcoded secrets and cloud CLI safety, with more components landing
+in v3.0-rc.2. Apply on every code generation, file write, and shell command.
+Born from real production incidents.
+"""
+
+preamble = """
+# Catpilot Security Core
+
+Catpilot's universal security baseline for AI coding agents. The components
+in this bundle are always-on. They apply on every file write, diff review,
+and shell command the agent is about to run, regardless of language or
+framework.
+
+Each component below is a self-contained skill with its own rules, detection
+patterns, and remediation guidance. Component IDs match the entries in
+`metadata.catpilot.bundle.components` in the frontmatter so a finding can be
+mapped back to a specific source skill (and to its severity, version, and
+control mappings).
+
+This bundle is generated deterministically from
+`src/skills/core/<id>/SKILL.md` by `tools/bundle.py` in the
+ToomeSauce/catpilot-ai-guardrails repository. Edits to this file are
+overwritten on the next bundle. To change behavior, edit the corresponding
+source skill and rebuild.
+"""
