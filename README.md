@@ -1,261 +1,116 @@
+# Catpilot Security Skills
 
-# Guardrails for Coding Agents
 <p align="left">
   <img src="assets/catpilot-logo.png" alt="Catpilot" width="100" style="vertical-align: middle;">
   <em>Paws before you push.</em>
 </p>
 
-![Version](https://img.shields.io/badge/version-2.0.1-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Release](https://img.shields.io/badge/release-2026.05.06-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Format](https://img.shields.io/badge/format-Anthropic%20Agent%20Skills-7B3FE4)
 
-Most coding agents read a local file for project-specific guidance—but most teams leave it empty. Drop in these guardrails to catch dangerous patterns that cause **outages, security vulnerabilities, and secret leaks.**
+Security skills for AI coding agents — installable into Claude Code, Cursor, Codex, OpenClaw, Cline, Aider, GitHub Copilot, OpenCode, and 40+ other agents with one command.
 
-Built by [Catpilot.ai](https://catpilot.ai)—born from a real incident where an agent wiped production environment variables with a partial YAML update. MIT licensed. Dogfooded daily. PRs welcome.
+Born from a real incident where an agent wiped production environment variables with a partial YAML update. The rules in this repo come from incidents like that one — battle-tested, dogfooded daily at [Catpilot.ai](https://catpilot.ai), MIT-licensed.
 
-## Quick Start
-
-```bash
-git submodule add https://github.com/catpilotai/catpilot-ai-guardrails.git .github/catpilot-ai-guardrails
-./.github/catpilot-ai-guardrails/setup.sh
-git add .gitmodules .github/
-git commit -m "Add AI guardrails"
-```
-
-That's it. Your coding agent now follows the safety rules.
-
-<details>
-<summary><strong>🧩 Framework Detection (Automatic)</strong></summary>
-
-The setup script auto-detects your framework and adds relevant security patterns:
-
-| Detected File | Framework |
-|---------------|-----------|
-| `package.json` with `"next"` | Next.js |
-| `manage.py` or `requirements.txt` with `django` | Django (+Core Python) |
-| `Gemfile` with `rails` | Rails |
-| `requirements.txt` with `fastapi` | FastAPI (+Core Python) |
-| `pom.xml`/`build.gradle` with `spring` | Spring Boot |
-| `package.json` with `"express"` | Express |
-| `tsconfig.json` (without Next.js) | TypeScript |
-| `*.py` or `requirements.txt` | Python (Core/Scripts) |
-| `Dockerfile` | Docker |
-| `openclaw.mjs`, `.openclaw/`, or `AGENTS.md` with openclaw refs | OpenClaw |
-| `requirements.txt`/`pyproject.toml` with `langchain`, `crewai`, `autogpt`, `langgraph` | Agentic AI |
+## Install
 
 ```bash
-# Auto-detect (recommended)
-./.github/catpilot-ai-guardrails/setup.sh
-
-# Override detection
-./.github/catpilot-ai-guardrails/setup.sh --framework django
-
-# Skip framework patterns
-./.github/catpilot-ai-guardrails/setup.sh --no-framework
-
-# Verify installed version matches source
-./.github/catpilot-ai-guardrails/setup.sh --verify
+npx skills add catpilotai/catpilot-ai-guardrails --skill catpilot-security-core
 ```
 
-Each framework adds ~600-800 bytes of security patterns specific to that stack.
+That's it. Your coding agent now follows the security rules.
 
-</details>
+This uses the [skills.sh CLI](https://skills.sh) (`vercel-labs/skills`), which copies `catpilot-security-core/SKILL.md` into the right place for your agent (e.g. `~/.claude/skills/`, `.cursor/rules/`, `~/.codex/skills/`, …). 51+ runtimes supported.
 
-<details>
-<summary><strong>📁 For Organizations (Fork-based workflow)</strong></summary>
+## What's in the box
 
-For teams that want to customize rules or control updates:
+`catpilot-security-core` (~26 KB) — the always-on baseline. Apply it on every code generation, file write, and shell command:
 
-### Step 1: Fork This Repo
+| Component | Catches |
+|---|---|
+| **secret-blocking** | Hardcoded API keys, tokens, passwords, private keys, OAuth secrets, JWT signing keys, database URLs with embedded credentials. |
+| **cloud-cli-safety** | Partial-YAML resets (Azure, AWS, GCP), `terraform apply -auto-approve` against prod state, `kubectl delete namespace`, `helm upgrade` without diff, recursive S3 deletes — every cloud command goes through the universal six-step protocol. |
 
-Fork `catpilotai/catpilot-ai-guardrails` to your organization (e.g., `YOUR_ORG/catpilot-ai-guardrails`).
+Each component carries control mappings for **SOC 2, PCI-DSS, ISO 27001, NIST CSF, and OWASP Top 10**, with severity, evidence patterns, and worked negative examples (real incidents, masked).
 
-### Step 2: Add Submodule to Your Repos
+More components and framework extensions land in subsequent releases.
+
+## Format
+
+Skills use the [Anthropic Agent Skills](https://agentskills.io/specification) format exactly. A skill is a directory containing a `SKILL.md` file with YAML frontmatter and a markdown body. Catpilot extensions (severity, control mappings, applies-to, evidence patterns) live under `metadata.catpilot.*`, which other runtimes ignore.
+
+This means: anywhere `npx skills add` works, Catpilot skills work. Anywhere it doesn't, you can copy the directory in by hand and your agent will read it.
+
+## Other ways to install
 
 ```bash
-git submodule add git@github.com:YOUR_ORG/catpilot-ai-guardrails.git .github/catpilot-ai-guardrails
+# Install globally so every project picks it up
+npx skills add catpilotai/catpilot-ai-guardrails --skill catpilot-security-core --global
+
+# Pick a specific agent (skills.sh defaults to detecting installed agents)
+npx skills add catpilotai/catpilot-ai-guardrails --skill catpilot-security-core --agent cursor
+
+# List what's available without installing
+npx skills add catpilotai/catpilot-ai-guardrails --list
+
+# Or skip the CLI entirely — just copy the skill in by hand
+git clone https://github.com/catpilotai/catpilot-ai-guardrails.git
+cp -r catpilot-ai-guardrails/skills/catpilot-security-core ~/.claude/skills/
 ```
 
-### Step 3: Run Setup & Commit
+## Versioning
 
-```bash
-./.github/catpilot-ai-guardrails/setup.sh
-git add .gitmodules .github/
-git commit -m "Add AI guardrails"
+- **Releases** are CalVer (`YYYY.MM.DD`). Current release: **`2026.05.06`**.
+- **Source skill components** inside a release are semver — `secret-blocking@1.0.0`, `cloud-cli-safety@1.0.0`. The release frontmatter records which versions of which components shipped.
+
+CalVer matches the cadence of a content repo: each release is a dated snapshot, and the date is the meaningful signal for users and auditors. Semver on individual components carries the breaking-change semantics that matter for downstream consumers.
+
+## How it's built
+
+```
+src/skills/             # source components (semver, edited by hand)
+  core/
+    bundle.toml         # tier config: name, version, description
+    secret-blocking/
+      SKILL.md          # one component
+    cloud-cli-safety/
+      SKILL.md
+skills/                 # shipped bundles (CalVer, generated)
+  catpilot-security-core/
+    SKILL.md            # what `npx skills add` installs
+tools/
+  bundle.py             # deterministic bundler
+docs/spec/              # format spec, packaging spec, V2 postmortem
 ```
 
-### Customizing Rules
-
-Add company-specific rules by editing the "🎯 Project-Specific Rules" section at the bottom of `copilot-instructions.md` in your fork.
-
-### Staying Up to Date
-
-```bash
-cd your-fork-of-ai-guardrails
-git fetch upstream    # git remote add upstream https://github.com/catpilotai/catpilot-ai-guardrails.git
-git merge upstream/main
-git push
-```
-
-Then in each repo:
-```bash
-git submodule update --remote .github/catpilot-ai-guardrails
-./.github/catpilot-ai-guardrails/setup.sh --force
-git add .github/
-git commit -m "Update AI guardrails"
-```
-
-</details>
-
-## Tool Support
-
-| Tool | Instruction File | Auto-configured |
-|------|------------------|------------------|
-| VS Code + GitHub Copilot | `.github/copilot-instructions.md` | ✅ |
-| Cursor | `.cursorrules` | ✅ (symlink) |
-| Windsurf | `.windsurf/rules/` | ✅ (symlink) |
-| JetBrains + AI Assistant | `.github/copilot-instructions.md` | ✅ |
-| Claude Code | `CLAUDE.md` | ✅ (symlink) |
-| Cline | `.clinerules` | ✅ (symlink) |
-| Aider | `.aider.conf.yml` | ✅ (config entry) |
-| OpenClaw | `AGENTS.md` | ✅ (symlink) |
-| Codex CLI | Manual | ⚠️ See below |
-
-<details>
-<summary><strong>Codex CLI usage</strong></summary>
-
-Codex CLI doesn't auto-read project files. Pass guardrails via the `--instructions` flag:
-
-```bash
-# One-off command
-codex --instructions "$(cat .github/copilot-instructions.md)" "fix the auth bug"
-
-# Or create a shell alias in ~/.zshrc or ~/.bashrc
-alias codex-safe='codex --instructions "$(cat .github/copilot-instructions.md)"'
-
-# Then use normally
-codex-safe "fix the auth bug"
-```
-
-</details>
-
-## What It Catches
-
-- ☁️ **Cloud CLI safety** (Azure, AWS, GCP) — query before modify, confirm before execute
-- 🔑 **Secret detection** — 40+ patterns (Stripe, AWS, GitHub tokens, etc.)
-- 🗄️ **Database safety** — transactions, previews, no DELETE without WHERE
-- 🏗️ **Terraform/IaC** — plan before apply, no `-auto-approve`
-- ☸️ **Kubernetes/Helm** — dry-run and diff before applying
-- 📦 **Git safety** — no force-push to protected branches
-- 🛡️ **Secure coding** — OWASP Top 10, input validation, output encoding
-- � **AI agent safety** — prompt injection defense, credential isolation, gateway binding
-- 📦 **Supply chain** — skill/plugin vetting, typosquatting detection, red flag patterns
-- 🔐 **File permissions** — credential directories, SSH keys, agent config
-- 🚨 **Incident response** — secret rotation, git history purging, blast radius assessment
-- 🔄 **CI/CD safety** — pin actions to SHA, minimal permissions, no secrets in logs
-- 🧩 **Framework patterns** — Next.js, Django, Rails, FastAPI, Spring Boot, Express, TypeScript, Python, Docker, OpenClaw, Agentic AI
-
-**Example: Cloud CLI protection**
-
-Without guardrails:
-```bash
-# AI runs this — looks fine, right?
-az containerapp update --yaml partial-config.yaml
-# 💥 Result: CPU reset to 0.5, memory to 1GB, all env vars deleted
-```
-
-With guardrails:
-```bash
-# AI queries current state first
-az containerapp show --name myapp --query "properties.template"
-# Shows you the full command and asks for confirmation before executing
-# Prepares rollback command in case something goes wrong
-```
-
-<details>
-<summary><strong>More examples</strong></summary>
-
-**Command Injection prevention**
-
-Without guardrails:
-```python
-# AI generates this — user controls filename
-os.system(f"convert {filename} output.png")
-# 💥 Attacker passes: "image.png; rm -rf /"
-```
-
-With guardrails:
-```python
-# AI uses subprocess with list (no shell interpretation)
-subprocess.run(["convert", filename, "output.png"], check=True)
-```
-
-**SQL Injection prevention**
-
-Without guardrails:
-```python
-# AI generates this
-query = f"SELECT * FROM users WHERE id = {user_id}"
-cursor.execute(query)
-```
-
-With guardrails:
-```python
-# AI uses parameterized queries
-query = "SELECT * FROM users WHERE id = %s"
-cursor.execute(query, (user_id,))
-```
-
-**Secret detection**
-
-Without guardrails:
-```python
-# AI hardcodes credentials
-API_KEY = "sk_live_abc123..."
-stripe.api_key = API_KEY
-```
-
-With guardrails:
-```python
-# AI uses environment variables
-import os
-stripe.api_key = os.environ["STRIPE_API_KEY"]
-```
-
-</details>
-
-## Files
-
-| File | Purpose |
-|------|---------|
-| `copilot-instructions.md` | Condensed rules (~7KB) — **auto-loaded by IDE** |
-| `FULL_GUARDRAILS.md` | Complete reference (~35KB) — detailed examples, loaded on-demand |
-| `frameworks/` | Framework-specific patterns (auto-detected: Next.js, Django, Rails, FastAPI, Spring Boot, Express, TypeScript, Python, Docker, OpenClaw, Agentic AI) |
-
-<details>
-<summary><strong>How the two files work together</strong></summary>
-
-The condensed `copilot-instructions.md` is automatically injected into every AI request by your IDE. The complete `FULL_GUARDRAILS.md` is NOT auto-loaded (too large), but the AI can read it when encountering edge cases or when you ask explicitly.
-
-This approach optimizes for minimal context window usage while keeping complete documentation available.
-
-</details>
-
-## Cloning Repos With This Submodule
-
-```bash
-git clone --recurse-submodules <repo-url>
-
-# Or if already cloned:
-git submodule update --init --recursive
-```
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history and what's new.
+`tools/bundle.py` reads source components, aggregates frontmatter (severity = max, control mappings = sorted union, `applies_to` = union with `any` collapse), concatenates bodies in lexicographic order, and writes the shipped bundle. CI runs `python tools/bundle.py --check` on every PR — if `skills/` drifts from `src/skills/`, the build fails with a unified diff.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on adding patterns and submitting PRs.
+PRs welcome — propose a new rule, fix a false positive, add a control mapping, port a v2.x rule into a source skill.
+
+- Read [`docs/spec/SKILL_FORMAT.md`](./docs/spec/SKILL_FORMAT.md) for the frontmatter shape.
+- Read [`docs/spec/PACKAGING.md`](./docs/spec/PACKAGING.md) for tier conventions and bundler aggregation rules.
+- Run `python tools/bundle.py` before pushing; the CI gate is strict.
+- See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the rest.
+
+## Roadmap
+
+| Tier | Bundle | Status |
+|---|---|---|
+| Core (always-on) | `catpilot-security-core` | shipped (2 components, 5 more queued) |
+| Framework extensions | `catpilot-django-security`, `catpilot-fastapi-security`, `catpilot-rails-security`, `catpilot-express-security`, `catpilot-nextjs-security`, `catpilot-springboot-security`, `catpilot-docker-security` | planned (content exists in `frameworks/`, migrating into source skills) |
+| Advanced (multi-agent / opt-in) | `catpilot-security-advanced` | planned |
+
+Validator (`tools/validate-skill.py`) and framework-detection helper (`tools/recommend.py`) follow.
+
+## Migrating from v2.x
+
+If you're on a v2.x install (`git submodule add … && ./setup.sh`), the v2 files in this repo (`copilot-instructions.md`, `FULL_GUARDRAILS.md`, `setup.sh`, `frameworks/*`) still work — they're soft-deprecated, not removed. New installs should use the skills.sh path above. Migration guide lands as those files are ported into the new source-skills layout.
 
 ## License
 
-MIT — See [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](./LICENSE).
+
+## Security
+
+Found something dangerous? See [SECURITY.md](./SECURITY.md). For specific vulnerabilities, email **hi@catpilot.ai**.

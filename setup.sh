@@ -1,16 +1,32 @@
 #!/bin/bash
 #
-# AI Guardrails Setup Script
+# AI Guardrails Setup Script (v2.x — DEPRECATED)
 # https://github.com/catpilotai/catpilot-ai-guardrails
 #
-# WHAT IT DOES:
+# *** DEPRECATED AS OF RELEASE 2026.05.06 ***
+#
+# This installer is kept working for v2.x users, but new installs should
+# use skills.sh (the vercel-labs/skills CLI) and the Anthropic Agent
+# Skills format:
+#
+#   npx skills add catpilotai/catpilot-ai-guardrails --skill catpilot-security-core
+#
+# That command works on 51+ AI coding agents (Claude Code, Cursor, Codex,
+# OpenClaw, Cline, Aider, GitHub Copilot, OpenCode, etc.) and copies the
+# skill into the right place automatically.
+#
+# See README.md, CHANGELOG.md, and docs/spec/ for migration details.
+#
+# ---
+#
+# WHAT THIS SCRIPT DOES (v2.x behavior):
 #   - Installs guardrails to .github/copilot-instructions.md
 #   - Merges with existing file if present (backs up first)
 #   - Auto-detects framework (Next.js, Django, Rails, etc.) and adds patterns
 #   - Creates symlinks for multiple AI tools (Claude Code, Cursor, Windsurf, Cline)
 #   - Configures Aider if .aider.conf.yml exists
 #
-# SUPPORTED TOOLS:
+# SUPPORTED TOOLS (v2.x):
 #   VS Code + Copilot, Cursor, Windsurf, JetBrains, Claude Code, Cline, Aider
 #
 # USAGE:
@@ -28,6 +44,18 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Deprecation notice (shown at every run; doesn't block execution)
+echo -e "${YELLOW}╔════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${YELLOW}║${NC} ${RED}DEPRECATED:${NC} setup.sh is the v2.x installer.                          ${YELLOW}║${NC}"
+echo -e "${YELLOW}║${NC} New installs should use:                                            ${YELLOW}║${NC}"
+echo -e "${YELLOW}║${NC}                                                                     ${YELLOW}║${NC}"
+echo -e "${YELLOW}║${NC}   ${GREEN}npx skills add catpilotai/catpilot-ai-guardrails \\${NC}                  ${YELLOW}║${NC}"
+echo -e "${YELLOW}║${NC}     ${GREEN}--skill catpilot-security-core${NC}                                  ${YELLOW}║${NC}"
+echo -e "${YELLOW}║${NC}                                                                     ${YELLOW}║${NC}"
+echo -e "${YELLOW}║${NC} Continuing with v2.x install for backward compatibility...         ${YELLOW}║${NC}"
+echo -e "${YELLOW}╚════════════════════════════════════════════════════════════════╝${NC}"
+echo ""
 
 # Determine script location (works even when called from different directory)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

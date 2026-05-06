@@ -1,4 +1,16 @@
-# AI Guardrails
+# AI Guardrails (v2.x — deprecated)
+
+> **Status:** **Deprecated as of release `2026.05.06`.**
+>
+> This is the v2.x condensed rules file written into `.github/copilot-instructions.md` by `setup.sh`. It still works for existing installs. **For new installs**, use the [Anthropic Agent Skills](https://agentskills.io/specification) format and skills.sh:
+>
+> ```bash
+> npx skills add catpilotai/catpilot-ai-guardrails --skill catpilot-security-core
+> ```
+>
+> See [`README.md`](./README.md), [`CHANGELOG.md`](./CHANGELOG.md), and [`docs/spec/`](./docs/spec/) for the new format and migration rationale.
+
+---
 
 > **Version:** 2.0.1 | **Full Reference:** [FULL_GUARDRAILS.md](./FULL_GUARDRAILS.md)
 
