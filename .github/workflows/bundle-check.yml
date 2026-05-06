@@ -1,0 +1,32 @@
+name: bundle-check
+
+on:
+  pull_request:
+    paths:
+      - "src/skills/**"
+      - "skills/**"
+      - "tools/bundle.py"
+      - ".github/workflows/bundle-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/skills/**"
+      - "skills/**"
+      - "tools/bundle.py"
+      - ".github/workflows/bundle-check.yml"
+
+jobs:
+  bundle-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install bundler dependencies
+        run: pip install pyyaml
+
+      - name: Verify skills/ is the deterministic output of src/skills/
+        run: python tools/bundle.py --check

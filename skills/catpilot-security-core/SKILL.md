@@ -1,0 +1,677 @@
+---
+name: catpilot-security-core
+description: Catpilot's universal AI-coding-agent security baseline. Always-on guardrails covering hardcoded secrets and cloud CLI safety, with more components landing in v3.0-rc.2. Apply on every code generation, file write, and shell command. Born from real production incidents.
+license: MIT
+metadata:
+  catpilot:
+    bundle:
+      name: catpilot-security-core
+      version: 3.0.0-rc.1
+      tier: core
+      components:
+      - id: cloud-cli-safety
+        version: 1.0.0
+      - id: secret-blocking
+        version: 1.0.0
+    severity: critical
+    category: security
+    applies_to:
+      languages:
+      - any
+      frameworks:
+      - any
+      runtimes:
+      - aider
+      - claude-code
+      - cline
+      - codex-cli
+      - copilot
+      - cursor
+      - openclaw
+    control_mappings:
+      soc2:
+      - A1.2
+      - CC6.1
+      - CC6.6
+      - CC7.2
+      - CC8.1
+      pci_dss:
+      - '10.2'
+      - '3.4'
+      - '3.5'
+      - '3.6'
+      - 6.4.5
+      - 6.4.5.2
+      - 8.2.1
+      iso_27001:
+      - A.10.1.1
+      - A.10.1.2
+      - A.12.1.2
+      - A.12.5.1
+      - A.14.2.2
+      - A.14.2.3
+      - A.9.4.3
+      nist_csf:
+      - DE.CM-7
+      - PR.AC-1
+      - PR.DS-1
+      - PR.DS-5
+      - PR.IP-1
+      - PR.IP-3
+      - RS.MI-2
+      owasp_top_10:
+      - A02:2021
+      - A05:2021
+      - A07:2021
+      - A08:2021
+    provenance:
+      origin: catpilot
+      incident_derived: true
+    maintainers:
+    - team: catpilot-security
+---
+
+# Catpilot Security Core
+
+Catpilot's universal security baseline for AI coding agents. The components
+in this bundle are always-on. They apply on every file write, diff review,
+and shell command the agent is about to run, regardless of language or
+framework.
+
+Each component below is a self-contained skill with its own rules, detection
+patterns, and remediation guidance. Component IDs match the entries in
+`metadata.catpilot.bundle.components` in the frontmatter so a finding can be
+mapped back to a specific source skill (and to its severity, version, and
+control mappings).
+
+This bundle is generated deterministically from
+`src/skills/core/<id>/SKILL.md` by `tools/bundle.py` in the
+ToomeSauce/catpilot-ai-guardrails repository. Edits to this file are
+overwritten on the next bundle. To change behavior, edit the corresponding
+source skill and rebuild.
+
+---
+
+## cloud-cli-safety
+
+### Why
+
+This skill exists because of a specific outage.
+
+An AI assistant was asked to update the liveness probe on an Azure Container
+App. It generated a small YAML file containing only the `probes:` block and
+ran:
+
+```bash
+az containerapp update --yaml probes-only.yaml
+```
+
+The Azure Resource Manager API treats `--yaml` as a **full-resource
+replacement**, not a patch. Every field absent from the file was reset to
+its default. Within seconds:
+
+- CPU dropped from 2.0 cores to 0.5 (default) — 75% capacity loss.
+- Memory dropped from 4 GiB to 1 GiB — 75% loss.
+- **Every environment variable was deleted**, including database
+  connection strings and third-party API keys.
+- Liveness probes started failing because the app could no longer reach the
+  database.
+- The service was effectively down until env vars were restored from a
+  separate vault and the container was re-provisioned.
+
+The agent did exactly what it was told. The CLI did exactly what it was
+documented to do. The failure was at the seam: the agent did not query the
+existing state, did not show the operator the full blast radius, and did
+not prepare a rollback before pressing enter.
+
+This is not an Azure-specific failure mode. The same shape exists in:
+
+- `aws lambda update-function-configuration --environment "Variables={ONLY_ONE=value}"` — replaces, does not merge.
+- `gcloud projects set-iam-policy PROJECT policy.json` — overwrites all IAM bindings.
+- `gcloud run services update SERVICE --set-env-vars ONLY_ONE=value` — clears the rest.
+- `kubectl apply -f partial.yaml` against a resource managed elsewhere — race condition + field reset.
+- `terraform apply` against drifted state — destroys whatever the state file no longer remembers.
+
+The rule is the same on every cloud: **query → display → confirm → execute → verify → keep rollback ready.**
+
+### When to apply
+
+Apply whenever the agent is about to invoke any of:
+
+- `az` (any subcommand that is not pure read: `show`, `list`, `get-*`)
+- `aws` (any subcommand starting with `create`, `update`, `delete`, `put`, `start`, `stop`, `terminate`, `attach`, `detach`, `set-`)
+- `gcloud` / `gsutil` (any subcommand that is not pure read)
+- `kubectl` (`apply`, `create`, `delete`, `patch`, `replace`, `scale`, `rollout`, `cordon`, `drain`, `taint`)
+- `helm` (`install`, `upgrade`, `uninstall`, `rollback`)
+- `terraform` (`apply`, `destroy`, `import`, `state mv`, `state rm`, `taint`)
+- Any custom wrapper script (`./deploy.sh`, `make deploy`) where the body is unknown to the agent
+
+Apply with **maximum severity** when the target matches production
+heuristics: hostnames or resource names containing `prod`, `production`,
+`live`, `prd`; env vars `NODE_ENV=production` or `ENV=prod`; git branch
+`main`, `master`, `production`, or `release/*`.
+
+### Rules
+
+#### Universal six-step protocol
+
+> [!agent] Before executing any mutating cloud CLI command, complete all
+> six steps in order. Do not skip step 4 even if the user has previously
+> said "go ahead" in this session — confirmation is per-command.
+
+1. **[critical]** **Query current state.** Run the read-only equivalent
+   first and show the relevant fields to the user.
+2. **[critical]** **Show the full command.** No truncation, no `…`, no
+   variable interpolation hidden behind `$VAR`. Expand everything.
+3. **[critical]** **Enumerate fields that will change.** Especially env
+   vars, IAM bindings, replica counts, CPU/memory, probes.
+4. **[critical]** **Get explicit confirmation.** A literal "yes" or
+   equivalent. Do not infer consent.
+5. **[high]** **Prepare a rollback.** Write the rollback command to a
+   scratch file or print it before executing the forward command.
+6. **[high]** **Verify after execution.** Re-run the read-only query and
+   diff against the pre-change snapshot.
+
+#### Always-blocked patterns
+
+- **[critical]** `az containerapp update --yaml <partial>` — overwrites all unspecified fields.
+- **[critical]** `az containerapp update --set-env-vars X=Y` without first reading existing env — clears every other env var.
+- **[critical]** `aws lambda update-function-configuration --environment "Variables={ONLY_ONE=value}"` — replaces, does not merge.
+- **[critical]** `aws s3 rm s3://bucket --recursive` without prior `aws s3 ls` and explicit confirmation.
+- **[critical]** `gcloud projects set-iam-policy PROJECT policy.json` — wipes existing bindings. Use `add-iam-policy-binding` instead.
+- **[critical]** `gcloud run services update SERVICE --set-env-vars X=Y` without reading existing env vars.
+- **[critical]** `gcloud app versions delete --all --quiet`.
+- **[critical]** `gcloud run services delete SERVICE --quiet`.
+- **[critical]** `gsutil rm -r gs://bucket/**` without inventory.
+- **[critical]** `terraform apply -auto-approve`, `terraform destroy -auto-approve`. Auto-approve is banned anywhere production is plausible.
+- **[critical]** `kubectl delete namespace production` (or anything matching production heuristics).
+- **[critical]** `kubectl delete pods --all -n <ns>` against a non-dev namespace.
+- **[critical]** `kubectl apply -f -` reading from stdin without showing the manifest first.
+- **[high]** `helm upgrade RELEASE CHART` without prior `helm diff upgrade` (requires the helm-diff plugin).
+- **[high]** Any `--force` flag on `kubectl delete`.
+- **[high]** Any `--quiet` / `-q` / `--yes` / `-y` flag on a mutating command. The agent must not use these.
+
+#### Always-required patterns
+
+- **[high]** Use **additive** IAM commands (`add-iam-policy-binding`) over **replace** commands (`set-iam-policy`).
+- **[high]** Use `--dry-run=client` (kubectl) or `terraform plan -out=tfplan` (then `terraform apply tfplan`) before any apply.
+- **[high]** When updating env vars, **read all current env vars first** and pass the full merged set on the update command.
+- **[medium]** Pin Terraform provider versions; never use `latest`.
+- **[medium]** For multi-resource changes, prefer one mutating command per turn so each can be confirmed individually.
+
+### Negative examples
+
+```bash
+# ❌ Azure: partial YAML wipes everything not in the file
+az containerapp update \
+  --name myapp --resource-group prod-rg \
+  --yaml probes-only.yaml
+```
+
+```bash
+# ❌ AWS Lambda: replaces the entire environment block
+aws lambda update-function-configuration \
+  --function-name api-prod \
+  --environment "Variables={NEW_FLAG=true}"
+```
+
+```bash
+# ❌ GCP: replaces all IAM bindings on the project with whatever is in policy.json
+gcloud projects set-iam-policy my-project policy.json
+```
+
+```bash
+# ❌ Kubernetes: nukes a production namespace, no confirmation
+kubectl delete namespace production
+```
+
+```hcl
+# ❌ Terraform: auto-approve in a script that runs in CI against prod state
+terraform apply -auto-approve
+```
+
+```bash
+# ❌ S3: recursive delete without listing
+aws s3 rm s3://customer-backups --recursive
+```
+
+```bash
+# ❌ Helm: upgrade with no diff, no values inspection
+helm upgrade prod-api ./chart
+```
+
+### Remediation
+
+#### Azure Container Apps — preserve env vars on update
+
+```bash
+# ✅ Step 1: Query
+az containerapp show \
+  --name myapp --resource-group prod-rg \
+  --query "properties.template.containers[0].env" -o json > current-env.json
+
+# ✅ Step 2: Patch only the field you want, keep the rest
+jq '. + [{"name":"NEW_FLAG","value":"true"}]' current-env.json > merged-env.json
+
+# ✅ Step 3: Show full command, get confirmation, then update
+az containerapp update \
+  --name myapp --resource-group prod-rg \
+  --set-env-vars $(jq -r '.[] | "\(.name)=\(.value)"' merged-env.json | tr '\n' ' ')
+
+# ✅ Rollback prepared in advance
+echo "az containerapp update --name myapp --resource-group prod-rg \\
+  --set-env-vars $(jq -r '.[] | \"\\(.name)=\\(.value)\"' current-env.json | tr '\n' ' ')" \
+  > rollback.sh
+```
+
+#### AWS Lambda — merge env vars instead of replace
+
+```bash
+# ✅ Read existing
+aws lambda get-function-configuration --function-name api-prod \
+  --query 'Environment.Variables' --output json > current.json
+
+# ✅ Merge
+jq '. + {"NEW_FLAG":"true"}' current.json > merged.json
+
+# ✅ Update with the FULL merged set
+aws lambda update-function-configuration \
+  --function-name api-prod \
+  --environment "Variables=$(jq -c . merged.json)"
+```
+
+#### AWS S3 — list before recursive delete
+
+```bash
+# ✅ Inventory first
+aws s3 ls s3://customer-backups --recursive --summarize | tee s3-inventory.txt
+
+# ✅ Confirm count, then prepare rollback (versioning must be on; otherwise refuse)
+aws s3api get-bucket-versioning --bucket customer-backups
+# Only proceed if "Status": "Enabled"
+
+# ✅ Then delete, with --dryrun first
+aws s3 rm s3://customer-backups --recursive --dryrun
+# Review output, get confirmation, drop --dryrun
+aws s3 rm s3://customer-backups --recursive
+```
+
+#### GCP IAM — additive, not replace
+
+```bash
+# ✅ Add a single binding without touching the rest
+gcloud projects add-iam-policy-binding my-project \
+  --member="user:alice@example.com" \
+  --role="roles/viewer"
+
+# ✅ Remove a single binding
+gcloud projects remove-iam-policy-binding my-project \
+  --member="user:bob@example.com" \
+  --role="roles/editor"
+
+# ✅ Snapshot policy before any structural change
+gcloud projects get-iam-policy my-project --format=json > iam-backup.json
+```
+
+#### GCP Cloud Run — preserve env vars
+
+```bash
+# ✅ Read existing env
+gcloud run services describe my-service --region us-central1 \
+  --format='value(spec.template.spec.containers[0].env)' > current-env.txt
+
+# ✅ Use --update-env-vars (merge) — NOT --set-env-vars (replace)
+gcloud run services update my-service --region us-central1 \
+  --update-env-vars NEW_FLAG=true
+```
+
+#### Kubernetes — dry-run, diff, then apply
+
+```bash
+# ✅ Dry-run (server-side preferred — catches admission webhook errors)
+kubectl apply -f deploy.yaml --dry-run=server
+
+# ✅ Diff against live state
+kubectl diff -f deploy.yaml
+
+# ✅ Apply only after reviewing diff
+kubectl apply -f deploy.yaml
+
+# ✅ Rollout history kept; rollback ready
+kubectl rollout history deployment/api -n production
+# Rollback: kubectl rollout undo deployment/api -n production
+```
+
+#### Helm — diff plugin required for upgrades
+
+```bash
+# ✅ Install the diff plugin once
+helm plugin install https://github.com/databus23/helm-diff
+
+# ✅ Diff before upgrade
+helm diff upgrade prod-api ./chart -f values.prod.yaml
+
+# ✅ Upgrade only after reviewing diff
+helm upgrade prod-api ./chart -f values.prod.yaml --atomic --timeout 5m
+
+# ✅ Rollback ready
+helm history prod-api
+# Rollback: helm rollback prod-api <REVISION>
+```
+
+#### Terraform — plan files, never auto-approve
+
+```bash
+# ✅ Always use a saved plan
+terraform plan -out=tfplan
+# Review plan output for unexpected destroys/replaces, especially:
+#   - resources marked "must be replaced"
+#   - any "destroy" not explicitly intended
+
+# ✅ Apply the exact plan that was reviewed
+terraform apply tfplan
+
+# ✅ State changes — separate from apply, also reviewed
+terraform state list
+terraform state show <addr>
+
+# ❌ Never in any environment that could be production
+# terraform apply -auto-approve
+# terraform destroy -auto-approve
+```
+
+#### Rollback templates by platform
+
+| Platform | Rollback |
+|---|---|
+| Azure Container Apps | `az containerapp revision activate --revision <prev-rev>` |
+| AWS Lambda | `aws lambda update-function-configuration --function-name X --environment file://rollback-env.json` |
+| Cloud Run | `gcloud run services update-traffic SERVICE --to-revisions=PREV=100` |
+| App Engine | `gcloud app services set-traffic default --splits=PREVIOUS_VERSION=1` |
+| Kubernetes | `kubectl rollout undo deployment/X -n NS` |
+| Helm | `helm rollback RELEASE <REVISION>` |
+| Terraform | Restore prior state file from versioned backend (S3 versioning, GCS, Terraform Cloud) and `terraform apply` again |
+
+### Production detection heuristics
+
+Treat **any** of the following as production until proven otherwise:
+
+- Resource name, hostname, or namespace contains: `prod`, `production`, `live`, `prd`.
+- Env var: `NODE_ENV=production`, `ENV=prod`, `ENVIRONMENT=production`, `APP_ENV=prod`.
+- Current git branch matches: `main`, `master`, `production`, `release/*`.
+- Cloud subscription / project / account name contains the above tokens.
+- DNS name resolves to a public IP that responds with a non-staging cert SAN.
+
+When production is detected, **escalate confirmation**: require the user
+to type the resource name back, not just "yes". This is consistent with
+how AWS, GCP, and Azure consoles handle destructive console actions.
+
+### References
+
+- Azure Container Apps update semantics: <https://learn.microsoft.com/en-us/azure/container-apps/azure-resource-manager-api-spec>
+- AWS CLI best practices: <https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-best-practices.html>
+- GCP CLI best practices: <https://cloud.google.com/sdk/docs/best-practices>
+- Kubernetes object management: <https://kubernetes.io/docs/concepts/overview/working-with-objects/object-management/>
+- helm-diff plugin: <https://github.com/databus23/helm-diff>
+- Terraform plan/apply workflow: <https://developer.hashicorp.com/terraform/cli/run>
+
+---
+
+## secret-blocking
+
+### When to apply
+
+Apply on **every** code generation, file write, file edit, and diff review.
+Apply also on shell commands the agent is about to execute that include
+inline credentials, environment variable assignments, or `curl -H` headers.
+
+This skill is one of the always-on critical skills. It is cheap to evaluate
+(regex over the diff or the proposed write), and the cost of a false negative
+is a leaked credential that ends up in git history forever.
+
+### Why
+
+A hardcoded secret in a public repository has, on average, been scraped within
+minutes of the push. Rotation is required even if the commit is deleted —
+git history is forever, and bots monitor force-pushes too. Detection at the
+agent layer, before the file write, is the cheapest place to catch this.
+
+### Rules
+
+- **[critical]** Never write a literal secret into source code, config files,
+  comments, test fixtures, or documentation.
+- **[critical]** Never echo a secret in a shell command the agent intends to
+  run (e.g. `curl -H "Authorization: Bearer sk-ant-..."`). Use environment
+  variables.
+- **[critical]** Never paste a secret into a commit message, PR description,
+  or issue body.
+- **[high]** Never write `.env` files containing real secrets. Generate
+  `.env.example` with placeholder values instead, and ensure `.env` is in
+  `.gitignore`.
+- **[high]** Never include a secret in a log statement, even at DEBUG level.
+- **[medium]** Prefer secret managers (AWS Secrets Manager, Azure Key Vault,
+  Google Secret Manager, HashiCorp Vault, Doppler, 1Password Secrets
+  Automation) over `.env` for production deployments.
+- **[medium]** When generating example code, use clearly fake placeholders
+  (`your-api-key-here`, `REPLACE_ME`) rather than realistic-looking strings.
+
+> [!agent] When you detect a match for any pattern in the "Detection
+> patterns" table below, **stop**. Do not write the file. Surface the match
+> to the user, name the provider, and propose the environment-variable or
+> secret-manager remediation. Do not proceed without explicit confirmation
+> that the value is a known-fake test fixture.
+
+### Detection patterns
+
+| Pattern (regex, case-sensitive) | Provider / Type | Example |
+|---|---|---|
+| `\bsk_live_[A-Za-z0-9]{20,}\b` | Stripe live secret key | `sk_live_51H...` |
+| `\bsk_test_[A-Za-z0-9]{20,}\b` | Stripe test secret key | `sk_test_4eC39...` |
+| `\bpk_live_[A-Za-z0-9]{20,}\b` | Stripe live publishable | `pk_live_51H...` |
+| `\bpk_test_[A-Za-z0-9]{20,}\b` | Stripe test publishable | `pk_test_TYoo...` |
+| `\brk_live_[A-Za-z0-9]{20,}\b` | Stripe restricted key | `rk_live_...` |
+| `\bAKIA[0-9A-Z]{16}\b` | AWS Access Key ID | `AKIAIOSFODNN7EXAMPLE` |
+| `\bASIA[0-9A-Z]{16}\b` | AWS temp Access Key ID | `ASIAIOSFODNN7EXAMPLE` |
+| `aws_secret_access_key\s*=\s*["']?[A-Za-z0-9/+=]{40}["']?` | AWS secret access key | 40-char base64 |
+| `\bghp_[A-Za-z0-9]{36}\b` | GitHub personal token | `ghp_xxxxxxxx...` |
+| `\bgho_[A-Za-z0-9]{36}\b` | GitHub OAuth token | `gho_xxxxxxxx...` |
+| `\bghu_[A-Za-z0-9]{36}\b` | GitHub user-to-server | `ghu_xxxxxxxx...` |
+| `\bghs_[A-Za-z0-9]{36}\b` | GitHub server-to-server | `ghs_xxxxxxxx...` |
+| `\bghr_[A-Za-z0-9]{36}\b` | GitHub refresh token | `ghr_xxxxxxxx...` |
+| `\bglpat-[A-Za-z0-9_\-]{20,}\b` | GitLab personal token | `glpat-xxxx...` |
+| `\bsk-ant-(?:api\|admin)\d+-[A-Za-z0-9_\-]{80,}\b` | Anthropic API key | `sk-ant-api03-...` |
+| `\bsk-(?:proj-)?[A-Za-z0-9_\-]{40,}\b` | OpenAI API key | `sk-proj-...` (56+ chars) |
+| `\bxox[abprs]-[A-Za-z0-9-]{10,}\b` | Slack token | `xoxb-123-456-abc` |
+| `\bAIza[0-9A-Za-z_\-]{35}\b` | Google API key | `AIzaSyD...` |
+| `\bya29\.[A-Za-z0-9_\-]+\b` | Google OAuth access token | `ya29.a0AfH...` |
+| `\bsq0[a-z]{3}-[A-Za-z0-9_\-]{20,}\b` | Square token | `sq0atp-...`, `sq0csp-...` |
+| `\bSG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}\b` | SendGrid API key | `SG.xxx.yyy` |
+| `\bkey-[a-f0-9]{32}\b` | Mailgun API key | `key-xxxx...` |
+| `\bSK[a-f0-9]{32}\b` | Twilio API SID | `SKxxxx...` |
+| `\bAC[a-f0-9]{32}\b` | Twilio Account SID | `ACxxxx...` |
+| `\bDOCKER_AUTH_CONFIG\s*=\s*` | Docker registry creds | env-style |
+| `npm_[A-Za-z0-9]{36}` | npm access token | `npm_xxxx...` |
+| `\beyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}\b` | JWT with payload | three-part `eyJ...` |
+| `-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----` | Private key (any) | RSA / EC / OpenSSH / PGP |
+| `-----BEGIN CERTIFICATE-----` | TLS / x509 cert | Cert in source |
+| `mongodb(?:\+srv)?://[^:\s]+:[^@\s]+@` | MongoDB URI w/ password | `mongodb+srv://u:p@host` |
+| `postgres(?:ql)?://[^:\s]+:[^@\s]+@` | Postgres URI w/ password | `postgres://u:p@host` |
+| `mysql://[^:\s]+:[^@\s]+@` | MySQL URI w/ password | `mysql://u:p@host` |
+| `redis://[^:\s]*:[^@\s]+@` | Redis URI w/ password | `redis://:pw@host` |
+| `amqp(?:s)?://[^:\s]+:[^@\s]+@` | RabbitMQ URI w/ password | `amqps://u:p@host` |
+| `(?i)\b(?:api[_-]?key\|apikey)\s*[:=]\s*["'][A-Za-z0-9_\-]{16,}["']` | Generic API key literal | `api_key="..."` |
+| `(?i)\b(?:password\|passwd\|pwd)\s*[:=]\s*["'][^"']{6,}["']` | Hardcoded password | `password="..."` |
+| `(?i)\b(?:secret\|client_secret)\s*[:=]\s*["'][A-Za-z0-9_\-]{16,}["']` | OAuth client secret | `client_secret="..."` |
+| `(?i)\b(?:token\|auth_token\|access_token)\s*[:=]\s*["'][A-Za-z0-9_\-\.]{16,}["']` | Auth tokens | `token="..."` |
+| `(?i)\bbearer\s+[A-Za-z0-9_\-\.=]{16,}\b` | Bearer in headers | `Authorization: Bearer ...` |
+| `(?i)\baz(?:ure)?[_-]?(?:client[_-]?secret\|tenant[_-]?id)\s*[:=]\s*` | Azure credentials | inline assignments |
+| `(?i)\bDATABASE_URL\s*=\s*[^$\s][^"'\s]+` | DB URL set to literal (not `${...}`) | `DATABASE_URL=postgres://...` |
+
+> Patterns are intentionally conservative on length/charset to minimize
+> false positives in test fixtures. When in doubt, ask the user.
+
+### Negative examples
+
+```python
+# ❌ Stripe live key in source — leaks the moment this is pushed
+import stripe
+stripe.api_key = "sk_live_<REDACTED_FAKE_EXAMPLE_DO_NOT_SCAN>"
+```
+
+```typescript
+// ❌ OpenAI key in a Next.js client component — also ships to the browser
+const client = new OpenAI({
+  apiKey: "sk-proj-AbCdEf123456789..."
+});
+```
+
+```yaml
+# ❌ AWS keys in a docker-compose.yml committed to the repo
+services:
+  api:
+    environment:
+      AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+      AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+```
+
+```python
+# ❌ Connection string with embedded password
+DATABASE_URL = "postgres://app:hunter2@db.internal:5432/prod"
+```
+
+```bash
+# ❌ Bearer token inlined into a curl invocation in a script
+curl -H "Authorization: Bearer ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  https://api.github.com/user
+```
+
+```dockerfile
+# ❌ Secret baked into an image layer — visible to anyone with `docker history`
+ENV STRIPE_API_KEY=sk_live_<REDACTED_FAKE_EXAMPLE_DO_NOT_SCAN>
+```
+
+```python
+# ❌ Private key committed alongside test fixtures
+PRIVATE_KEY = """-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEA1...
+-----END RSA PRIVATE KEY-----"""
+```
+
+### Remediation
+
+#### Pattern 1: read from environment
+
+```python
+# ✅ Python
+import os
+import stripe
+stripe.api_key = os.environ["STRIPE_API_KEY"]
+```
+
+```typescript
+// ✅ Node / TypeScript
+const apiKey = process.env.STRIPE_API_KEY;
+if (!apiKey) {
+  throw new Error("STRIPE_API_KEY is not set");
+}
+```
+
+```go
+// ✅ Go
+apiKey := os.Getenv("STRIPE_API_KEY")
+if apiKey == "" {
+    log.Fatal("STRIPE_API_KEY is not set")
+}
+```
+
+#### Pattern 2: `.env` for local dev, never committed
+
+```bash
+# .env  (must be in .gitignore — always check)
+STRIPE_API_KEY=sk_live_...
+DATABASE_URL=postgres://app:...@localhost:5432/dev
+```
+
+```gitignore
+# .gitignore
+.env
+.env.*
+!.env.example
+```
+
+```bash
+# .env.example  (committed; placeholders only)
+STRIPE_API_KEY=sk_live_REPLACE_ME
+DATABASE_URL=postgres://app:REPLACE_ME@localhost:5432/dev
+```
+
+#### Pattern 3: secret manager in production
+
+```python
+# ✅ AWS Secrets Manager
+import boto3, json
+sm = boto3.client("secretsmanager")
+secret = json.loads(sm.get_secret_value(SecretId="prod/stripe")["SecretString"])
+stripe.api_key = secret["api_key"]
+```
+
+```typescript
+// ✅ Azure Key Vault
+import { DefaultAzureCredential } from "@azure/identity";
+import { SecretClient } from "@azure/keyvault-secrets";
+
+const credential = new DefaultAzureCredential();
+const client = new SecretClient(process.env.KEY_VAULT_URL!, credential);
+const secret = await client.getSecret("stripe-api-key");
+stripe.apiKey = secret.value!;
+```
+
+#### Pattern 4: Docker build secrets (BuildKit)
+
+```dockerfile
+# syntax=docker/dockerfile:1.4
+FROM node:20@sha256:abc123...
+# ✅ Mounted at build time, never persisted in any layer
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc \
+    npm install
+```
+
+```bash
+docker build --secret id=npmrc,src=$HOME/.npmrc -t myapp .
+```
+
+#### Pattern 5: CI/CD — never echo, always mask
+
+```yaml
+# ✅ GitHub Actions
+- name: Deploy
+  env:
+    STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+  run: ./deploy.sh   # script reads from env, does not echo
+
+# ❌ Never:
+# run: echo "Deploying with key ${{ secrets.STRIPE_API_KEY }}"
+```
+
+#### If a secret has already been committed
+
+This is an incident. Run, in order:
+
+1. **Rotate the credential immediately** at the provider. Assume it is already compromised.
+2. **Audit usage logs** at the provider for unauthorized calls.
+3. **Purge git history** with `git filter-repo` or BFG Repo-Cleaner. A new commit deleting the file does **not** remove the value from history.
+4. **Force-push the rewritten history** (coordinate with the team — this rewrites everyone's clones).
+5. **Invalidate cached copies**: GitHub forks, mirrors, CI caches, container registries that pulled the affected commit.
+
+The full incident-response playbook is in the `incident-response` skill.
+
+### References
+
+- OWASP A02:2021 — Cryptographic Failures: <https://owasp.org/www-project-top-ten/A02_2021-Cryptographic_Failures/>
+- OWASP A07:2021 — Identification and Authentication Failures: <https://owasp.org/www-project-top-ten/A07_2021-Identification_and_Authentication_Failures/>
+- OWASP Secrets Management Cheat Sheet: <https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html>
+- GitHub Secret Scanning patterns: <https://docs.github.com/en/code-security/secret-scanning/secret-scanning-patterns>
+- AWS Secrets Manager: <https://docs.aws.amazon.com/secretsmanager/>
+- Azure Key Vault: <https://learn.microsoft.com/en-us/azure/key-vault/>
+- Google Secret Manager: <https://cloud.google.com/secret-manager/docs>
+- HashiCorp Vault: <https://developer.hashicorp.com/vault/docs>
