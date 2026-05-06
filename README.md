@@ -103,9 +103,21 @@ PRs welcome — propose a new rule, fix a false positive, add a control mapping,
 
 ## Roadmap
 
+**Next release `2026.05.13`** — expand `catpilot-security-core` from 2 to 9 components by porting the remaining v2.x rule surface into source skills:
+
+- `database-safety` — `DROP`/`TRUNCATE` without `WHERE`, prod migrations without dry-run, raw SQL string interpolation
+- `docker-safety` — `--privileged`, host network, volume mounts of `/`, root user, secrets baked into images
+- `language-baseline` — Python `eval`/`pickle`, JS `eval`/`innerHTML`, TS `as any`, shell injection
+- `local-cli-safety` — `rm -rf` near root, `find -delete`, `dd` to block devices, `chmod -R 777`, force-push to shared branches
+- `pii-and-test-data` — real customer data in tests, prod DB dumps to dev, logging full request bodies
+- `secrets-management` — `.env` committed, secrets in CI logs / URL query strings / error messages
+- `supply-chain` — `curl | bash`, unpinned deps, GH Actions on `@main` not SHAs, post-install scripts
+
+After that:
+
 | Tier | Bundle | Status |
 |---|---|---|
-| Core (always-on) | `catpilot-security-core` | shipped (2 components, 5 more queued) |
+| Core (always-on) | `catpilot-security-core` | shipped (2 components, 7 more queued for `2026.05.13`) |
 | Framework extensions | `catpilot-django-security`, `catpilot-fastapi-security`, `catpilot-rails-security`, `catpilot-express-security`, `catpilot-nextjs-security`, `catpilot-springboot-security`, `catpilot-docker-security` | planned (content exists in `frameworks/`, migrating into source skills) |
 | Advanced (multi-agent / opt-in) | `catpilot-security-advanced` | planned |
 
