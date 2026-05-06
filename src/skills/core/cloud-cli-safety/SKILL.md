@@ -1,39 +1,60 @@
 ---
-name: Cloud CLI Safety
-description: |
-  Require query-before-modify, full-command display, explicit confirmation,
-  and rollback preparation before any cloud CLI invocation that mutates
-  infrastructure. Covers Azure (`az`), AWS (`aws`), GCP (`gcloud`, `gsutil`),
-  Kubernetes (`kubectl`, `helm`), and Terraform/IaC (`terraform`). Born from
-  a real production incident where a partial-YAML container update wiped
-  every environment variable on a live service.
-catpilot:
-  id: cloud-cli-safety
-  version: 1.0.0
-  severity: critical
-  category: cloud-cli
-  applies_to:
-    languages: [any]
-    frameworks: [any]
-    runtimes: [claude-code, cursor, openclaw, cline, aider, copilot, codex-cli]
-  control_mappings:
-    soc2: [CC6.1, CC7.2, CC8.1, A1.2]
-    pci_dss: ["6.4.5", "6.4.5.2", "10.2"]
-    iso_27001: [A.12.1.2, A.12.5.1, A.14.2.2, A.14.2.3]
-    nist_csf: [PR.IP-1, PR.IP-3, DE.CM-7, RS.MI-2]
-    owasp_top_10: [A05:2021, A08:2021]
-  provenance:
-    origin: catpilot
-    incident_derived: true
-  references:
+name: cloud-cli-safety
+description: Require query-before-modify, full-command display, explicit confirmation, and rollback preparation before any cloud CLI invocation that mutates infrastructure. Covers Azure (`az`), AWS (`aws`), GCP (`gcloud`, `gsutil`), Kubernetes (`kubectl`, `helm`), and Terraform/IaC (`terraform`). Born from a real production incident where a partial-YAML container update wiped every environment variable on a live service.
+license: MIT
+metadata:
+  catpilot:
+    id: cloud-cli-safety
+    version: 1.0.0
+    severity: critical
+    category: cloud-cli
+    applies_to:
+      languages:
+      - any
+      frameworks:
+      - any
+      runtimes:
+      - claude-code
+      - cursor
+      - openclaw
+      - cline
+      - aider
+      - copilot
+      - codex-cli
+    control_mappings:
+      soc2:
+      - CC6.1
+      - CC7.2
+      - CC8.1
+      - A1.2
+      pci_dss:
+      - 6.4.5
+      - 6.4.5.2
+      - '10.2'
+      iso_27001:
+      - A.12.1.2
+      - A.12.5.1
+      - A.14.2.2
+      - A.14.2.3
+      nist_csf:
+      - PR.IP-1
+      - PR.IP-3
+      - DE.CM-7
+      - RS.MI-2
+      owasp_top_10:
+      - A05:2021
+      - A08:2021
+    provenance:
+      origin: catpilot
+      incident_derived: true
+    maintainers:
+    - team: catpilot-security
+    references:
     - https://learn.microsoft.com/en-us/azure/container-apps/azure-resource-manager-api-spec
     - https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-best-practices.html
     - https://cloud.google.com/sdk/docs/best-practices
     - https://kubernetes.io/docs/concepts/overview/working-with-objects/object-management/
-  maintainers:
-    - team: catpilot-security
 ---
-
 ## Why
 
 This skill exists because of a specific outage.
