@@ -5,11 +5,13 @@
   <em>Paws before you push.</em>
 </p>
 
-![Release](https://img.shields.io/badge/release-2026.05.06-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Format](https://img.shields.io/badge/format-Anthropic%20Agent%20Skills-7B3FE4)
+![Release](https://img.shields.io/badge/release-2026.05.11-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Format](https://img.shields.io/badge/format-Anthropic%20Agent%20Skills-7B3FE4)
 
 Security skills for AI coding agents — installable into Claude Code, Cursor, Codex, OpenClaw, Cline, Aider, GitHub Copilot, OpenCode, and 40+ other agents with one command. Also natively consumable by [Hermes Agent](https://hermes-agent.nousresearch.com) via its built-in skills system.
 
 Born from a real incident where an agent wiped production environment variables with a partial YAML update. The rules in this repo come from incidents like that one — battle-tested, dogfooded daily at [Catpilot.ai](https://catpilot.ai), MIT-licensed.
+
+This repository is the portable baseline. The Catpilot enterprise platform is separate: it collects security events from your tools, coaches the person closest to the issue, and can generate private team-specific guardrail or skill updates with approvals and audit evidence.
 
 ## Install
 
@@ -20,6 +22,21 @@ npx skills add catpilotai/catpilot-ai-guardrails --skill catpilot-security-core
 That's it. Your coding agent now follows the security rules.
 
 This uses the [skills.sh CLI](https://skills.sh) (`vercel-labs/skills`), which copies `catpilot-security-core/SKILL.md` into the right place for your agent (e.g. `~/.claude/skills/`, `.cursor/rules/`, `~/.codex/skills/`, …). 51+ runtimes supported.
+
+## Public Baseline vs Team Memory
+
+The open-source skill is intentionally static, inspectable, and safe to install in any repo. It does not call Catpilot services and it does not send telemetry.
+
+Catpilot's enterprise platform adds the private memory loop:
+
+1. Collect security events from tools such as TruffleHog, Semgrep, Snyk, Wiz, Okta, Defender, GitHub, and phishing platforms.
+2. Coach the developer or employee in Slack while context is fresh.
+3. Generate a scoped guardrail or team skill update from the approved lesson.
+4. Ship the update through a fork, pull request, or managed deployment path.
+5. Record evidence linking the event, coaching, approval, diff, and deployed skill version.
+
+Do not put private incidents, customer data, secrets, employee identifiers, or internal policy excerpts into this public baseline. Keep those in private team skills generated and reviewed inside your organization.
+
 
 ## What's in the box
 
@@ -67,7 +84,7 @@ cp -r catpilot-ai-guardrails/skills/catpilot-security-core ~/.claude/skills/
 
 ## Versioning
 
-- **Releases** are CalVer (`YYYY.MM.DD`). Current release: **`2026.05.06`**.
+- **Releases** are CalVer (`YYYY.MM.DD`). Current release: **`2026.05.11`**.
 - **Source skill components** inside a release are semver — `secret-blocking@1.0.0`, `cloud-cli-safety@1.0.0`. The release frontmatter records which versions of which components shipped.
 
 CalVer matches the cadence of a content repo: each release is a dated snapshot, and the date is the meaningful signal for users and auditors. Semver on individual components carries the breaking-change semantics that matter for downstream consumers.

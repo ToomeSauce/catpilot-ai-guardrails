@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 Releases from `2026.05.06` forward use [CalVer](https://calver.org) (`YYYY.MM.DD`). Source-skill components inside each release continue to use [SemVer](https://semver.org).
 
+## [2026.05.11] — 2026-05-11
+
+### Changed
+
+- Bumped the `catpilot-security-core` bundle release to `2026.05.11`.
+- Clarified the product boundary between this public, zero-telemetry OSS baseline and Catpilot enterprise private team memory.
+- README now explains how enterprise-generated lessons should live in private organization-owned skills, not in the public baseline.
+
+### Security
+
+- Documented that private incidents, secrets, customer data, employee identifiers, and internal policy excerpts must stay out of the public skill bundle.
+
 ## [2026.05.06] — 2026-05-06
 
 ### Changed

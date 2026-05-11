@@ -6,7 +6,7 @@ metadata:
   catpilot:
     bundle:
       name: catpilot-security-core
-      version: 2026.05.06
+      version: 2026.05.11
       tier: core
       components:
       - id: cloud-cli-safety
