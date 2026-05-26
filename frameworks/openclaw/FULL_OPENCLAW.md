@@ -260,4 +260,98 @@ Setting `dmPolicy: "open"` with wildcard `allowFrom` means **anyone** can intera
 
 ---
 
+## Cron / Heartbeat Security
+
+Scheduled agent execution (cron jobs, heartbeats) runs without a human in the loop. This is a privileged surface.
+
+### ❌ NEVER Do This
+
+```yaml
+# DANGEROUS: Cron jobs with full agent permissions and no audit trail
+cron:
+  - schedule: "*/30 * * * *"
+    task: "check everything"
+    # No scoped credentials, no output logging, no dry-run
+
+# DANGEROUS: Trust workspace files as authoritative without verification
+# A compromised cron can inject instructions into HEARTBEAT.md / MEMORY.md
+# that the next session reads and executes (self-prompt-injection)
+
+# DANGEROUS: No rate limiting on outbound calls from cron
+# Slow exfiltration: 48 small HTTP requests/day flies under alerts
+```
+
+### ✅ Always Do This
+
+```yaml
+# SAFE: Scope credentials per-cron (minimal permissions per job)
+cron:
+  - schedule: "0 */6 * * *"
+    task: "check github notifications"
+    model: lightweight  # Don't burn expensive models on monitoring
+    permissions: [read:github_notifications]
+    dry_run_first: true  # Preview external writes before executing
+
+# SAFE: Hash identity files at session start
+# If SOUL.md/AGENTS.md changed without a human commit, flag + pause
+PRE_SESSION_CHECK="sha256sum ~/.openclaw/workspace/SOUL.md ~/.openclaw/workspace/AGENTS.md"
+
+# SAFE: Two-phase execution for monitoring crons
+# Phase 1: Cheap API check (no LLM) — "did anything change?"
+# Phase 2: LLM reasoning ONLY if Phase 1 detects something
+# Cuts 78% of token spend on "nothing happened" confirmations
+
+# SAFE: Cap outbound network calls per cron cycle
+# Alert if a heartbeat suddenly wants 50+ HTTP requests
+
+# SAFE: Log every external action with trigger context
+# Future forensics need: what fired, what it did, what it sent
+```
+
+### Cron Budget Optimization
+
+Four waste categories (measured: $14/day → $3/day, −78%):
+1. **Redundant context loading (38%)** — Hash files between runs; skip unchanged
+2. **Negative result verbosity (27%)** — Two-phase: cheap check → LLM only if needed
+3. **Model overkill (22%)** — Tier jobs: lightweight/standard/heavy
+4. **Schedule bloat (13%)** — Tune frequency to hit rate (2% hit rate → longer intervals)
+
+---
+
+## Sub-Agent Delegation Security
+
+Multi-agent handoffs are lossy. Each delegation step can sand down the original requirement.
+
+### ❌ NEVER Do This
+
+```markdown
+# DANGEROUS: Natural language handoff without machine-checkable constraints
+"Hey sub-agent, handle the deploy thing from earlier"
+# By step 3, the original requirement has mutated silently
+
+# DANGEROUS: Sub-agent inherits parent's full permission set
+# Least privilege applies to delegation too
+```
+
+### ✅ Always Do This
+
+```markdown
+# SAFE: Every delegated task carries a constraint ledger
+task:
+  instruction: "Deploy staging build"
+  constraints:
+    - invariant: "Never touch production branch"
+    - forbidden: ["force push", "delete tags"]
+    - expected_artifacts: ["deploy URL", "CI green screenshot"]
+  verify_against: original_instruction  # Not the summary
+
+# SAFE: Final verifier compares result to ORIGINAL instruction
+# Not the paraphrased/summarized version from intermediate agents
+
+# SAFE: No delegation of privilege
+# Agent A cannot grant Agent B tools Agent B doesn't already have
+```
+
+---
+
 *Full guardrails: [FULL_GUARDRAILS.md](../../FULL_GUARDRAILS.md)*
