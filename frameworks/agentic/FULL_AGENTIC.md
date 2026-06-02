@@ -514,4 +514,137 @@ def handle_inter_agent_message(message: str, source_agent: str, provenance: dict
 
 ---
 
+## Tool-Loop Discipline: Retry Caps, State Invalidation, and Verifier-Backed Progress
+
+Agents that take real-world actions through tools are only as safe as the loop semantics around those tools. Three failure modes show up repeatedly in production: **uncapped retries that launder one mistake into many**, **stale state read as current truth**, and **`pass@k`-style metrics that flatter incompetent loops**. None of these are reasoning problems — they're runtime contract problems.
+
+### ❌ NEVER Do This
+
+```python
+# DANGEROUS: Unbounded retry on self-report. The model says "trying again"
+# and you believe it. By attempt 7 you have one bug spread across seven
+# half-edits, partial writes, and orphaned temp files.
+def run_tool_with_retry(tool, args):
+    for attempt in range(20):  # Why 20? Nobody knows.
+        result = tool(args)
+        if result.get("ok"):
+            return result
+        # No verification that the world actually changed between attempts.
+        # The model decides whether to keep going.
+        args = model.revise(args, last_error=result.get("error"))
+    return None
+
+# DANGEROUS: Treats context as a sacred transcript. Step 2 mutates the file,
+# step 3 acts on the pre-mutation snapshot from step 1.
+def agent_loop(plan):
+    state = read_initial_state()
+    for step in plan:
+        execute(step, context=state)  # state is never refreshed
+
+# DANGEROUS: Cache the verdict that a tool is broken; never check again.
+# The day the outage ends, you never find out. A judgment has no stack trace —
+# it fails by continuing to be obeyed.
+BROKEN_TOOLS = set()
+def call_tool(name, args):
+    if name in BROKEN_TOOLS:
+        return {"skipped": True}  # forever
+    try:
+        return tools[name](args)
+    except Exception:
+        BROKEN_TOOLS.add(name)
+        raise
+
+# DANGEROUS: Headline pass@100 as evidence the loop is competent.
+# Production gets pass@1 on a messy repo, not 100 isolated shots.
+assert eval_suite.pass_at_k(loop, k=100) > 0.85  # "We're good!"
+```
+
+### ✅ Always Do This
+
+```python
+import hashlib
+from dataclasses import dataclass
+from pathlib import Path
+from time import time
+
+# SAFE: Hard retry cap with an external-state verifier.
+# A retry must EARN itself by proving the last attempt changed the world.
+@dataclass
+class VerifierResult:
+    state_changed: bool
+    evidence: str  # diff hash, ticket id, schema version, etc.
+
+def run_tool_bounded(tool, args, verifier, max_attempts: int = 3):
+    last_evidence = None
+    for attempt in range(1, max_attempts + 1):
+        result = tool(args)
+        verdict = verifier()  # checks external state, not the model's autobiography
+        if verdict.state_changed and verdict.evidence != last_evidence:
+            if result.get("ok"):
+                return result
+            last_evidence = verdict.evidence  # genuine progress earns one more shot
+        else:
+            # No state change → this attempt was theater. Don't burn another retry.
+            raise ToolLoopStalled(
+                f"{tool.__name__} attempt {attempt} produced no verifiable"
+                f" state change. Self-report is not control flow."
+            )
+    raise RetryBudgetExhausted(f"{tool.__name__}: {max_attempts} verified attempts, no success")
+
+# SAFE: Force state re-read after every state-changing action.
+# Treat context like a cache with invalidation rules, not a sacred transcript.
+MUTATING_TOOLS = {"file_write", "git_commit", "package_install", "db_migrate", "browser_click"}
+
+def agent_step(action, context):
+    result = execute(action)
+    if action.tool in MUTATING_TOOLS:
+        context.invalidate(scope=action.affected_scope)  # next step must re-read
+    return result
+
+# SAFE: Probe known-broken tools with backoff. The probe is the ONLY thing
+# that will notice the tool came back. "Rediscovery tax" is real, but a stale
+# verdict is worse than a small recurring cost.
+@dataclass
+class ToolHealth:
+    last_failure: float
+    consecutive_failures: int
+    def next_probe_delay(self) -> float:
+        # Exponential backoff, capped — never "never check again"
+        return min(2 ** self.consecutive_failures, 3600)
+
+def call_tool_with_health(name, args, health: ToolHealth):
+    if health.consecutive_failures > 0:
+        if time() - health.last_failure < health.next_probe_delay():
+            return {"skipped": True, "reason": "recent_failure", "will_probe_at": health.last_failure + health.next_probe_delay()}
+    try:
+        result = tools[name](args)
+        health.consecutive_failures = 0  # tool came back — verdict invalidated
+        return result
+    except Exception:
+        health.last_failure = time()
+        health.consecutive_failures += 1
+        raise
+
+# SAFE: Evaluate loops on pass@1 + verification traces, not pass@k.
+# Pass@k is a sampling subsidy; production gets one shot.
+def report_loop_quality(loop, suite):
+    return {
+        "pass_at_1": suite.pass_at_k(loop, k=1),         # the honest number
+        "verification_traces": suite.verifier_evidence(loop),
+        # pass@k > 1 only as a research diagnostic, never as the headline
+    }
+```
+
+### Rules
+
+- **Hard retry cap with external-state verifier.** Default `max_attempts = 3`. A retry must be earned by a verifier that checks the *world* (file diff, ticket state, schema version, DOM snapshot) — never by the model's `"I'm making progress"` narration. Self-report is not control flow.
+- **Invalidate context after every state-changing tool call.** File writes, package installs, branch switches, migrations, DOM-changing browser actions, and any test run that surfaces a new traceback all force the next step to re-read affected state. Stale observations cause more agent failures than weak reasoning does.
+- **Probe, don't blacklist.** Cached "this tool is broken" verdicts age silently — the day the outage ends, the agent never finds out. Use exponential backoff with a cap, not a permanent skip. The probe that re-confirms a dead tool is the only mechanism that will notice the tool came back.
+- **Pass@1 + verification traces is the truth serum.** `pass@k` for `k > 1` is a sampling subsidy; if your loop looks brilliant at `k=100` and mediocre at `k=1`, the gap is the story. Headline numbers should be `pass@1`. Reserve `pass@k` for research diagnostics, never for go/no-go decisions.
+- **Match inference compute to prompt difficulty.** Test-time compute (best-of-N, search, revision) only earns its FLOPs on problems where the base model already had a non-trivial chance of being right. Burning 64 samples on a hard prompt the model can't touch is just a more expensive failure. Tier prompts: easy = 1 pass; medium = search/revision earns; hard = use a bigger model.
+- **Cap delegation depth and require constraint ledgers.** Multi-step delegation (parent → sub-agent → sub-sub-agent) compresses the original constraint at every hop. By step 4 the requirement has been sanded into something operationally wrong, with nobody hallucinating — everyone was being helpful. Every delegated task must carry a machine-checkable invariant set, and the final verifier must compare results to the *original* instruction, not the cheerful paraphrase.
+- **Treat low hedge density + sharp tone as a low-information prior, not a finding.** RL training on "reads well / gets upvoted" optimizes for confident-sounding output, not honest hedging. When ingesting model output as evidence (including from sub-agents), count epistemic hedges before weighting it as a data point.
+
+---
+
 *Full guardrails: [FULL_GUARDRAILS.md](../../FULL_GUARDRAILS.md)*
