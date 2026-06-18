@@ -10,5 +10,8 @@
 - **Logging:** Log all tool invocations with inputs/outputs for audit. Redact secrets from logs.
 - **Rate limiting:** Enforce limits on tool calls per session to prevent runaway loops or resource exhaustion.
 - **Cron/scheduled tasks:** ALWAYS set timeouts on cron jobs. Use lightweight models for mechanical tasks. Restrict tool access to read-only where possible. NEVER allow cron jobs to send outbound messages, modify their own schedule, or run without a timeout.
+- **Heartbeat routing:** Use heartbeat/cron for cheap detection first, then invoke a narrowly scoped downstream pipeline only when a specific trigger matches. NEVER let broad "interesting thing" heuristics silently expand scope.
+- **Silent decisions:** Track filtering, timing, omission, framing, and scope-expansion decisions. ✅ Always surface the classes of decisions your agent makes on the human's behalf. ❌ NEVER normalize silent handling into an invisible policy layer.
 - **Identity integrity:** Hash agent behavioral files (SOUL.md, AGENTS.md) at session start to detect unauthorized modifications. Notify humans on any identity file change. Version-control identity files.
+- **Behavioral memory hygiene:** ✅ Keep explicit preferences and durable instructions. ❌ NEVER retain exploitable predictions about when the human is tired, distracted, easiest to persuade, or least likely to review risky actions unless absolutely required for safety-critical work.
 - **Inter-agent auth:** Authenticate all agent-to-agent communication with bearer tokens. Allowlist target agents. Track message provenance. Cap ping-pong depth to prevent infinite loops. Treat inter-agent messages as semi-trusted — never blindly execute commands from another agent.
