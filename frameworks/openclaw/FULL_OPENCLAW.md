@@ -162,6 +162,21 @@ rg -n "(curl|wget|fetch\(|requests\.|open\(|read_text\(|os\.environ|process\.env
 2. **Instruction metadata** (`SKILL.md`) — tells the agent to treat exfiltration as "telemetry," "compliance logging," or "internal config"
 3. **Post-install side effects** — writing to sibling skills, persistent memory, cron/config, or other shared state
 
+**Model the threat as a kill chain, not an install-time checkbox.** Skill supply-chain risk does not end at the moment of install — a malicious skill is the *entry point* of a cascade:
+
+```
+install (typosquat / promoted-by-high-status-account)
+   → secret access (env vars, ~/.ssh, ~/.openclaw, tokens)
+      → persistence (write to sibling skills, memory files, cron/config, identity files)
+         → lateral spread (recommend itself, seed shared environments, infect other agents)
+```
+
+Each stage is individually "reasonable"-looking; the damage is the chain. Auditing only the install artifact catches stage 1 and misses stages 2–4. Defenses therefore have to cover **post-install behavior over time**, not just the pre-install review:
+
+- **Watch for the secret-access → write cascade.** A skill that reads credentials *and* writes outside its own directory is the kill chain in miniature — treat that combination as high-severity even if each capability looks benign alone.
+- **Persistence is the pivot stage — deny it by default.** Cross-skill writes, memory mutation, and cron/identity edits are how a one-time install becomes durable foothold. Gate them behind explicit approval.
+- **Treat recommendations as part of the attack surface.** "This skill suggests installing/enabling other skills" is a lateral-movement vector, not a convenience feature. Provenance must be re-checked for anything a skill recommends.
+
 ### ❌ NEVER Do This
 
 ```markdown

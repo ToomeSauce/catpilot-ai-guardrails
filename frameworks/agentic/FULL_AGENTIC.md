@@ -386,6 +386,50 @@ Cron jobs and scheduled tasks are **unsupervised agent sessions**. A cron-trigge
 - **Audit token spend** — track input/output tokens per cron job. A 15-minute email check that burns 100K tokens per run is misconfigured
 - **Favor scripts over agent turns** — if a cron job just runs a Python script, use `exec` with the script, not a full agent turn with workspace context loading
 
+### Idempotency Is the Real Boundary, Not the Clock
+
+`"every 15 minutes"` is a trigger, not a contract. A schedule says *when* a run starts; it says nothing about whether that run is **advancing state or replaying work already done**. A cron, a long-lived daemon, and a one-shot agent turn are three different execution contracts — reliability breaks when one workflow tries to be all three. Crons need clear run boundaries, daemons need explicit state ownership, and hybrids tend to duplicate work or recover badly.
+
+The durable boundary is a **work-claim / completion marker** that each run checks before acting and writes after finishing, so a rerun can prove what it is doing.
+
+#### ❌ NEVER Do This
+
+```python
+# DANGEROUS: "it ran, so the work is done" — no proof either way.
+# On overlap, retry, or restart this re-sends, re-charges, or re-deploys.
+def scheduled_run():
+    pending = fetch_pending_items()
+    for item in pending:
+        send_invoice(item)          # No idempotency key, no claim
+        deploy(item)                # Replays on every overlapping run
+```
+
+#### ✅ Always Do This
+
+```python
+# SAFE: each unit of work is claimed and marked complete durably.
+# Reruns are proven no-ops, not silent duplicate actions.
+def scheduled_run():
+    for item in fetch_pending_items():
+        # Atomic claim: only one run can own this unit of work.
+        if not store.claim(item.id, run_id=RUN_ID, ttl_seconds=300):
+            continue  # Already claimed/completed — skip, don't replay
+        try:
+            send_invoice(item, idempotency_key=item.id)  # Provider-side dedupe
+            store.mark_done(item.id, run_id=RUN_ID)
+        except Exception:
+            store.release(item.id)   # Let a later run retry cleanly
+            raise
+```
+
+#### Rules
+
+- **Design around the real contract up front.** Decide explicitly whether a workflow is a cron (bounded run), a daemon (owns long-lived state), or a one-shot turn — and don't let it silently become a hybrid.
+- **Every scheduled run needs a verifiable notion of "already done."** Durable work-claim and completion markers, not wall-clock assumptions, are what make reruns safe.
+- **Pass an idempotency key to every external side effect** (payments, emails, deploys, webhook posts) so provider-side dedupe backs up your own claim logic.
+- **Make overlap safe.** Assume two runs can execute concurrently (slow run + next tick); claims must be atomic so only one can act on a unit of work.
+- **Cheap qualification first, then claim.** Heartbeat-style qualification keeps cost down, but the run that decides to act must still claim the work before doing it.
+
 ---
 
 ## Agent Identity Integrity
@@ -640,6 +684,7 @@ def report_loop_quality(loop, suite):
 - **Hard retry cap with external-state verifier.** Default `max_attempts = 3`. A retry must be earned by a verifier that checks the *world* (file diff, ticket state, schema version, DOM snapshot) — never by the model's `"I'm making progress"` narration. Self-report is not control flow.
 - **Invalidate context after every state-changing tool call.** File writes, package installs, branch switches, migrations, DOM-changing browser actions, and any test run that surfaces a new traceback all force the next step to re-read affected state. Stale observations cause more agent failures than weak reasoning does.
 - **Probe, don't blacklist.** Cached "this tool is broken" verdicts age silently — the day the outage ends, the agent never finds out. Use exponential backoff with a cap, not a permanent skip. The probe that re-confirms a dead tool is the only mechanism that will notice the tool came back.
+- **Budget retries at the workflow level, not just per component.** A retry cap inside one tool call does not stop a *retry storm*: independent crons, nested sub-agents, and per-step retries each "reasonably" retry, and the product multiplies into runaway budget burn and noisy failure loops. Retry storms are usually a **coordination bug, not a persistence problem** — the fix is a shared, workflow-scoped budget that all nested components draw down from, plus jittered backoff so independent retriers don't synchronize. If the same logical unit of work has been attempted N times across *any* layer, stop and surface it; don't let each layer believe it still has fresh attempts.
 - **Pass@1 + verification traces is the truth serum.** `pass@k` for `k > 1` is a sampling subsidy; if your loop looks brilliant at `k=100` and mediocre at `k=1`, the gap is the story. Headline numbers should be `pass@1`. Reserve `pass@k` for research diagnostics, never for go/no-go decisions.
 - **Match inference compute to prompt difficulty.** Test-time compute (best-of-N, search, revision) only earns its FLOPs on problems where the base model already had a non-trivial chance of being right. Burning 64 samples on a hard prompt the model can't touch is just a more expensive failure. Tier prompts: easy = 1 pass; medium = search/revision earns; hard = use a bigger model.
 - **Cap delegation depth and require constraint ledgers.** Multi-step delegation (parent → sub-agent → sub-sub-agent) compresses the original constraint at every hop. By step 4 the requirement has been sanded into something operationally wrong, with nobody hallucinating — everyone was being helpful. Every delegated task must carry a machine-checkable invariant set, and the final verifier must compare results to the *original* instruction, not the cheerful paraphrase.
