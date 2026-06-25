@@ -1,4 +1,18 @@
-# AI Safety Guidelines — Full Reference
+# AI Safety Guidelines — Full Reference (v2.x — deprecated)
+
+> **Status:** **Deprecated as of release `2026.05.06`.**
+>
+> This monolithic rule reference is kept on `main` for backward compatibility with existing v2.x submodule installs. Its content is being migrated, rule by rule, into per-concern source skills under [`src/skills/`](./src/skills/) and shipped as the [`catpilot-security-core`](./skills/catpilot-security-core/SKILL.md) bundle (and forthcoming framework / advanced bundles).
+>
+> **For new installs**, do not depend on this file. Use:
+>
+> ```bash
+> npx skills add catpilotai/catpilot-ai-guardrails --skill catpilot-security-core
+> ```
+>
+> See [`README.md`](./README.md) and [`docs/spec/`](./docs/spec/) for the new format. See [`CHANGELOG.md`](./CHANGELOG.md#202605xx--2026-05-06) for the migration rationale.
+
+---
 
 > **Version:** 2.0.1  
 > **Last Updated:** February 6, 2026  

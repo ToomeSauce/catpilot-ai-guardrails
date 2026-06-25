@@ -2,6 +2,95 @@
 
 All notable changes to this project will be documented in this file.
 
+Releases from `2026.05.06` forward use [CalVer](https://calver.org) (`YYYY.MM.DD`). Source-skill components inside each release continue to use [SemVer](https://semver.org).
+
+## [2026.06.25] — 2026-06-25
+
+### Added
+
+- **Agentic framework: Tool-Loop Discipline** — hard retry caps backed by an external-state verifier (a retry must prove the last attempt changed the world, not the model's "I'm making progress" narration), context invalidation after every state-changing tool call, probe-don't-blacklist for failed tools (exponential backoff, never a permanent skip), and `pass@1 + verification traces` as the honest evaluation number instead of `pass@k`. Adds delegation-depth caps with machine-checkable constraint ledgers and a low-information prior for confident-but-unhedged model output.
+- **Agentic framework: Cron Idempotency** — "the real boundary is idempotency, not the clock." Crons, daemons, and one-shot turns are distinct execution contracts; each scheduled run needs a durable work-claim/completion marker and an idempotency key on every external side effect so reruns prove they advance state rather than replay actions. Overlap-safe atomic claims.
+- **Agentic framework: Workflow-Level Retry Budgets** — retry storms are coordination bugs, not persistence: independent crons + nested sub-agents + per-step retries multiply into runaway budget burn. Budget retries across the whole workflow with a shared draw-down and jittered backoff.
+- **Agentic framework: Heartbeat Routing, Silent-Decision Transparency, Behavioral-Memory Hygiene** — cheap qualification before scoped downstream invocation; surface the classes of decisions an agent makes on the human's behalf (filtering, timing, omission, framing, scope expansion); retain explicit preferences but never exploitable predictions about when a human is least likely to review risky actions.
+- **OpenClaw framework: Skill Audit as Code + Instructions + Side Effects** — treat `SKILL.md` as executable intent, not documentation; audit the three attack layers (executable code, instruction metadata that reframes exfiltration as "telemetry," and post-install side effects to sibling skills/memory/cron/identity).
+- **OpenClaw framework: Skill Supply-Chain Kill Chain** — model the threat as a cascade (install → secret access → persistence → lateral spread), not an install-time checkbox. Deny the persistence pivot by default, flag read-secrets + write-outside-own-dir as high-severity, and re-check provenance for anything a skill recommends.
+- **OpenClaw framework: Skill Provenance & Cron/Heartbeat + Sub-Agent Delegation Security** — popularity/karma is attention metadata not a trust signal; prefer signed artifacts, permission manifests, and audit trails; scoped, timed, read-only-by-default contracts for unsupervised scheduled sessions and delegated sub-agents.
+- **Governance-drift guardrails** — distinguishing self-improvement from constraint drift across behavioral files.
+
+### Changed
+
+- Condensed rule sets for the `agentic` and `openclaw` frameworks updated with cron-idempotency, workflow-retry-budget, heartbeat-routing, silent-decision, behavioral-memory-hygiene, skill-provenance, and skill-kill-chain summaries.
+- Cuts the long gap since `2026.05.17`: this release lands the accumulated June agent-security research (Moltbook weeklies, June 18 + June 23) onto `main`.
+
+### Context
+
+These additions are derived from community agent-security research (Moltbook discussions, June 2026), with emphasis on the post-install / runtime phase of the threat model: tool-loop reliability, cron idempotency and retry coordination, and the skill supply chain as a lateral-movement kill chain rather than a one-time install decision. Consistent with the project's zero-telemetry OSS boundary — all guidance runs locally with no network surface to Catpilot.
+
+## [2026.05.17] — 2026-05-17
+
+### Added
+
+- **Seven new source skills**, bringing `catpilot-security-core` from 2 to 9 components. All seven port the v2.x `FULL_GUARDRAILS.md` and `frameworks/*` rule surface into standalone, Anthropic-spec-conformant skills:
+  - `database-safety@1.0.0` — destructive DML/DDL without `WHERE`, prod migrations without dry-run, raw SQL string interpolation, locking DDL on hot tables, transactional safety, query-then-modify protocol.
+  - `local-cli-safety@1.0.0` — `rm -rf` near `/` or `$HOME`, `find -delete` broad scope, `dd` to block devices, `chmod -R 777`, force-push to shared branches, agent/SSH/cloud-credential path protection.
+  - `docker-safety@1.0.0` — `--privileged`, host network, `-v /:/host`, root user in container, secrets baked into image layers, `:latest` tags, untrusted base images, build-arg misuse.
+  - `secrets-management@1.0.0` — `.env` lifecycle, secrets in CI logs / URL query strings / error messages, long-lived vs OIDC short-lived keys, secret reuse across environments, documented rotation cadence.
+  - `supply-chain@1.0.0` — `curl | bash` installers, unpinned dependencies, GitHub Actions on floating tags vs SHAs, typosquats, post-install scripts, agent skill / MCP server / IDE extension vetting, npm provenance + Sigstore verification.
+  - `pii-and-test-data@1.0.0` — RFC 2606/3849/5737 reserved test ranges, faker-based synthetic data, prohibition on prod→non-prod copy, PII out of logs/errors/telemetry, synthetic demo accounts, LLM input scrubbing via Presidio/Comprehend/DLP.
+  - `language-baseline@1.0.0` — language-agnostic injection and arbitrary-code-execution patterns (CWE-89/78/79/22/502/918): parameterized SQL, argv-array subprocess, escaping HTML sinks, validated path handling, type-constrained deserialization, eval-class prohibition, outbound HTTP allowlist + internal-IP rejection.
+- **Aggregated control coverage** across the bundle now spans SOC 2 (CC6.x, CC7.x, CC8.x, C1.1, P3.1), PCI-DSS (3.4, 6.x, 8.x, 10.x, 12.x), ISO 27001 (A.8.x, A.10.x, A.12.x, A.14.x, A.18.x), NIST CSF (PR.AC, PR.DS, PR.IP, DE.CM, DE.DP, ID.SC), and OWASP Top 10 (A01, A02, A03, A04, A05, A06, A08, A10).
+
+### Changed
+
+- `catpilot-security-core` bundle bumped to `2026.05.17`.
+- Bundle description updated to enumerate the full nine-component scope.
+- README "What's in the box" rewritten as a per-component severity table; roadmap updated to mark the core bundle feature-complete.
+
+## [2026.05.11] — 2026-05-11
+
+### Changed
+
+- Bumped the `catpilot-security-core` bundle release to `2026.05.11`.
+- Clarified the product boundary between this public, zero-telemetry OSS baseline and Catpilot enterprise private team memory.
+- README now explains how enterprise-generated lessons should live in private organization-owned skills, not in the public baseline.
+
+### Security
+
+- Documented that private incidents, secrets, customer data, employee identifiers, and internal policy excerpts must stay out of the public skill bundle.
+
+## [2026.05.06] — 2026-05-06
+
+### Changed
+
+- **Repo realigned to the [Anthropic Agent Skills](https://agentskills.io/specification) format.** Skills are now directories named `<skill>/` containing a `SKILL.md` file with YAML frontmatter, exactly matching the Anthropic spec. Catpilot-specific extensions live under `metadata.catpilot.*`, which other runtimes ignore.
+- **Distribution moved to [skills.sh](https://skills.sh) (`vercel-labs/skills`).** The new install command is `npx skills add catpilotai/catpilot-ai-guardrails --skill catpilot-security-core`. 51+ AI coding agents supported (Claude Code, Cursor, Codex, OpenClaw, Cline, Aider, GitHub Copilot, OpenCode, etc.).
+- **Versioning split.** Releases are CalVer (`YYYY.MM.DD`); source-skill components stay semver. The bundler validates both regimes.
+
+### Added
+
+- **`catpilot-security-core` bundle** — the always-on security baseline. Two components shipping in this release:
+  - `secret-blocking@1.0.0` — hardcoded secrets, API keys, tokens, OAuth credentials, JWT signing keys, DB URLs with embedded creds.
+  - `cloud-cli-safety@1.0.0` — partial-YAML resets, `terraform apply -auto-approve`, `kubectl delete namespace`, recursive S3 deletes, the universal six-step protocol for any cloud-modifying command.
+- **Spec docs** under `docs/spec/`: `SKILL_FORMAT.md` (frontmatter shape, validation, severity scale, body conventions), `PACKAGING.md` (three tiers, bundler mechanics, distribution), `V2_DIAGNOSTIC.md` (one-page postmortem on v2.x distribution).
+- **Deterministic bundler** at `tools/bundle.py` (~370 LOC, Python 3.11+). Aggregates severity (max), control mappings (sorted union), `applies_to` (union with `any` collapse). CalVer-validated bundle versions, semver-validated component versions.
+- **CI gate** at `.github/workflows/bundle-check.yml`. Runs `python tools/bundle.py --check` on every PR; fails with a unified diff if `skills/` drifts from `src/skills/`.
+- **Three packaging tiers** locked: `catpilot-security-core` (always-on), `catpilot-<framework>-security` (per-framework extensions), `catpilot-security-advanced` (multi-agent / opt-in). Only core ships in this release; the other two are planned.
+- **Compliance set** locked: SOC 2, PCI-DSS, ISO 27001, NIST CSF, OWASP Top 10. HIPAA and GDPR follow in a later release.
+
+### Deprecated
+
+- **Submodule + bash installer (`setup.sh`)** — still works for v2.x users, but the new install path is `npx skills add`. The script will print a deprecation notice when run.
+- **`copilot-instructions.md` and `FULL_GUARDRAILS.md`** — monolithic v2.x rule files. Their content is being migrated into per-concern source skills under `src/skills/`. Files remain on `main` until the migration completes.
+- **`frameworks/*` directories** — v2.x framework patterns (`FULL_*.md` + `condensed.md`). Migrating into `src/skills/<framework>/` extension skills as part of the next release cadence.
+
+### Architectural decisions locked
+
+- OSS = zero phone-home, ever. No telemetry, no crash reports, no anonymous events. SaaS-side dynamic skill updates are a separate workstream under commercial agreement.
+- Conformance: exact Anthropic Agent Skills, not "superset."
+- Tier 3 name: `catpilot-security-advanced` (not `agentic`).
+- Distribution: `npx skills add catpilotai/catpilot-ai-guardrails`. No custom installer.
+- Bundler implementation language: Python.
+
 ## [2.1.0] — 2026-03-06
 
 ### Added
