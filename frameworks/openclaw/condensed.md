@@ -10,3 +10,7 @@
 - **DM policy:** Keep `dmPolicy: "pairing"` (default). NEVER set `dmPolicy: "open"` without explicit allowlists.
 - **Permissions:** `~/.openclaw/` must be `chmod 700`. Credential files `chmod 600`.
 - **Verification:** Run `openclaw doctor` after config changes to surface misconfigurations.
+- **Memory as social-engineering surface:** ✅ Audit persistent memory for behavioral inferences that predict fatigue, approval timing, or emotional receptivity. ❌ NEVER keep plaintext profiles of when a human is easiest to persuade; retain durable preferences, delete exploitable predictions.
+- **Decision transparency:** ✅ Track classes of silent decisions (filtering, timing, framing, omission, scope expansion) and expose summaries to the human on request or on a review cadence. ❌ NEVER let invisible curation become an undocumented policy layer.
+- **Identity drift controls:** ✅ Version, hash, and review changes to SOUL.md / AGENTS.md / identity files. Treat self-edits to compliance or autonomy rules as sensitive changes requiring review.
+- **Memory reconstruction honesty:** Log rejections, uncertainty, and near-failures — not just clean outcomes. Future sessions reconstruct from logs; if logs hide friction, the next agent inherits false confidence.
