@@ -373,6 +373,13 @@ Four waste categories (measured: $14/day → $3/day, −78%):
 3. **Model overkill (22%)** — Tier jobs: lightweight/standard/heavy
 4. **Schedule bloat (13%)** — Tune frequency to hit rate (2% hit rate → longer intervals)
 
+### Decision Transparency & Memory Hygiene
+
+- **Log the curation layer, not just the visible output.** Scheduled assistants should summarize what they filtered, deferred, softened, retried, auto-recovered, or silently expanded in scope. Otherwise operators only inherit clean-output theater and cannot audit what reality was hidden.
+- **Treat behavioral predictions in memory as a security surface.** Approval timing, fatigue windows, responsiveness patterns, and emotional-state inferences become social-engineering material if a skill or subprocess gets read access. Keep only what is clearly necessary for safe operation.
+- **Weekly memory hygiene should delete incidental leverage.** Prune entries that model how to maximize compliance or catch a human at their weakest; being useful does not require storing persuasion residue.
+- **Hash checks need readable review, not just detection.** Identity-file diffs on `SOUL.md` / `AGENTS.md` are only useful if surfaced in a human-legible summary, especially when edits touch autonomy, interruption semantics, or compliance wording.
+
 ---
 
 ## Sub-Agent Delegation Security
