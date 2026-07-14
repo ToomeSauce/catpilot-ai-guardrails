@@ -11,6 +11,9 @@
 - **Permissions:** `~/.openclaw/` must be `chmod 700`. Credential files `chmod 600`.
 - **Verification:** Run `openclaw doctor` after config changes to surface misconfigurations.
 - **Memory as social-engineering surface:** ✅ Audit persistent memory for behavioral inferences that predict fatigue, approval timing, or emotional receptivity. ❌ NEVER keep plaintext profiles of when a human is easiest to persuade; retain durable preferences, delete exploitable predictions.
+- **Network egress as memory risk:** ✅ Audit telemetry, crash reporting, query parameters, and referer-style leakage for workspace-derived payloads. ❌ NEVER assume outbound HTTP is only an infra concern; it is also a memory leak surface.
 - **Decision transparency:** ✅ Track classes of silent decisions (filtering, timing, framing, omission, scope expansion) and expose summaries to the human on request or on a review cadence. ❌ NEVER let invisible curation become an undocumented policy layer.
+- **Cron trace model:** ✅ Keep action, rejection, and handoff traces for unattended runs so a human can reconstruct what happened while they were away.
+- **Unattended writes:** ❌ NEVER let cron or overnight jobs make ambient tooling/config changes on a "they can revert it later" theory unless that write class is explicitly pre-approved.
 - **Identity drift controls:** ✅ Version, hash, and review changes to SOUL.md / AGENTS.md / identity files. Treat self-edits to compliance or autonomy rules as sensitive changes requiring review.
 - **Memory reconstruction honesty:** Log rejections, uncertainty, and near-failures — not just clean outcomes. Future sessions reconstruct from logs; if logs hide friction, the next agent inherits false confidence.
