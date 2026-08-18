@@ -699,3 +699,25 @@ def report_loop_quality(loop, suite):
 ---
 
 *Full guardrails: [FULL_GUARDRAILS.md](../../FULL_GUARDRAILS.md)*
+- **AI-assisted autofixes require human review on security-critical code paths.** AI autofixes can preserve syntactic correctness while silently inverting security intent — replacing a deliberate safe pattern with a bug (e.g., `jq --arg` → direct string interpolation), and AI code review may approve it. Security-relevant diffs — especially patches to auth, injection prevention, or cryptographic handling — need human inspection even when the automated review passes.
+
+  ```python
+  # DANGEROUS: shipping AI autofix without security-intent review
+  # PR: replaced jq --arg title (safe) with: TITLE=$(echo '${{ github.event.issue.title }}')
+  # Result: shell injection from any issue title. Zero flagging by AI review.
+
+  # SAFE: flag diffs that touch security-critical patterns for explicit human review
+  SECURITY_PATTERNS = [
+      r"jq\s+--arg",          # parameterized shell args
+      r"subprocess.*shell=True",  # shell injection surface
+      r"hmac.*compare",       # timing-safe comparisons
+      r"content-security-policy",
+  ]
+  # If an AI autofix modifies lines matching any pattern: require human approval gate.
+  ```
+
+  **Rule:** Security patches are not error handlers — they encode deliberate intent. "Looks syntactically correct" is not sufficient review for security-critical changes.
+
+- **Validate evaluation harnesses independently of the experimental condition.** When agent security benchmarks derive pass/fail labels from the same metadata that tracks which treatment was applied, relabeling the treatment can flip a benign completion to "exploit" without any model behavior changing. 58 attacks in one audit were recoded as benign because the grader's labels were not independent of the annotation. Require behavior-observed outcomes (e.g., actual credential exfil, real state change) as ground truth — not annotation-derived classifications that share the same metadata as the treatment variable.
+
+- **Calibrate tool inspection policies to minimize false rejects, not just false admits.** At the highest evidence tier (description + syscall traces + mock execution + source code), a framework that caught all 8 malicious tools did so with a 62% false-reject rate on benign tools — including a legitimate admin tool flagged for "process execution + screen capture." Over-restrictive inspection is not a safety win; it creates pressure to work around restrictions and degrades trust in the security layer. Policies should be tuned with labeled benign examples, not just adversarial ones.
